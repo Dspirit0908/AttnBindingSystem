@@ -28,7 +28,15 @@ def preprocess(mode):
             out_f.write(json.dumps(info) + '\n')
 
 
-def load_data(path):
+def get_preprocess_path(mode):
+    return preprocess_path + mode + '.jsonl'
+
+
+def get_wikisql_tables_path(mode):
+    return wikisql_path + mode + '.tables.jsonl'
+
+
+def load_data(path, only_tokenize=False):
     print('loading {}'.format(path))
     tokenize_list = []
     tokenize_len_list = []
@@ -40,11 +48,17 @@ def load_data(path):
             pos_tag = info['pos_tag']
             # check
             assert len(tokenize) == len(pos_tag)
-
-            tokenize_len_list.append(len(tokenize))
             tokenize_list.append(tokenize)
-            pos_tag_list.append(pos_tag)
-    return tokenize_list, tokenize_len_list, pos_tag_list
+
+            if only_tokenize:
+                pass
+            else:
+                tokenize_len_list.append(len(tokenize))
+                pos_tag_list.append(pos_tag)
+    if only_tokenize:
+        return tokenize_list
+    else:
+        return tokenize_list, tokenize_len_list, pos_tag_list
 
 
 def build_vocab(m_lists, pre_func=None, init_vocab=None, min_count=1):
@@ -82,7 +96,6 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, min_count=1):
 
 def merge_dicts(dicts, copy=True):
     """
-    For merge vocabs.
     :param dicts: a list of dict.
     :param copy: copy dicts[0] for merge or use dicts[0] directly.
     :return: a merged dict.
@@ -104,7 +117,7 @@ def merge_dicts(dicts, copy=True):
 
 
 def set_seed(seed):
-    """Sets random seed everywhere."""
+    """Set random seed everywhere."""
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     random.seed(seed)

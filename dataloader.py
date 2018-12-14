@@ -10,17 +10,17 @@ from utils import load_data, build_vocab
 
 
 class BindingDataset(Dataset):
-    def __init__(self, mode, vocab=None):
+    def __init__(self, mode, vocab):
         data_path, tables_path = preprocess_path + mode + '.jsonl', wikisql_path + mode + '.tables.jsonl'
-
         tokenize_list, tokenize_len_list, pos_tag_list = load_data(data_path)
-                
         # check
         assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list)
         self.len = len(tokenize_list)
         
-        # get vocab
-        
+        # utils.py - a
+        if vocab is None:
+            
+
         # pad (truncate?)
 
         
