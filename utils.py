@@ -2,6 +2,9 @@
 
 import json
 import nltk
+import torch
+import random
+import numpy as np
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import WordPunctTokenizer
 from config import wikisql_path, preprocess_path
@@ -23,6 +26,25 @@ def preprocess(mode):
             info['lemmatize'] = [WordNetLemmatizer().lemmatize(word) for word in info['tokenize']]
             info['pos_tag'] = [x[1] for x in nltk.pos_tag(info['tokenize'])]
             out_f.write(json.dumps(info) + '\n')
+
+
+def load_data(path):
+    print('loading {}'.format(path))
+    tokenize_list = []
+    tokenize_len_list = []
+    pos_tag_list = []
+    with open(path) as f:
+        for line in f:
+            info = json.loads(line.strip())
+            tokenize = info['tokenize']
+            pos_tag = info['pos_tag']
+            # check
+            assert len(tokenize) == len(pos_tag)
+
+            tokenize_len_list.append(len(tokenize))
+            tokenize_list.append(tokenize)
+            pos_tag_list.append(pos_tag)
+    return tokenize_list, tokenize_len_list, pos_tag_list
 
 
 def build_vocab(m_lists, pre_func=None, init_vocab=None, min_count=1):
@@ -56,6 +78,37 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, min_count=1):
     word2index.update(dict(list(zip(sorted_wc, list(range(num, num + len(sorted_wc)))))))
     index2word.update(dict(list(zip(list(range(num, num + len(sorted_wc))), sorted_wc))))
     return word2index, index2word
+
+
+def merge_dicts(dicts, copy=True):
+    """
+    For merge vocabs.
+    :param dicts: a list of dict.
+    :param copy: copy dicts[0] for merge or use dicts[0] directly.
+    :return: a merged dict.
+    """
+    if copy:
+        dict_0 = dicts[0].copy()
+    else:
+        dict_0 = dicts[0]
+    max_value = max(dict_0.values())
+    for index in range(1, len(dicts)):
+        single_dict = dicts[index]
+        for key, value in single_dict:
+            if key in dict_0:
+                pass
+            else:
+                max_value += 1
+                dict_0[key] = max_value
+    return dict_0
+
+
+def set_seed(seed):
+    """Sets random seed everywhere."""
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
 
 if __name__ == '__main__':
