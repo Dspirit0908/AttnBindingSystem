@@ -59,29 +59,36 @@ def load_data(path, only_tokenize=False):
     tokenize_list = []
     tokenize_len_list = []
     pos_tag_list = []
+    table_id_list = []
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
             tokenize = info['tokenize']
             pos_tag = info['pos_tag']
+            table_id = info['table_id']
             # check
             assert len(tokenize) == len(pos_tag)
+            # append
             tokenize_list.append(tokenize)
-
             if only_tokenize:
                 pass
             else:
                 tokenize_len_list.append(len(tokenize))
                 pos_tag_list.append(pos_tag)
+                table_id_list.append(table_id)
     if only_tokenize:
         return tokenize_list
     else:
-        return tokenize_list, tokenize_len_list, pos_tag_list
+        # check
+        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list)
+        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list
 
 
-def load_tables(path):
+def load_tables(path, vocab=False):
     print('loading {}'.format(path))
     tables_info = {}
+    # for vocab
+    columns_split_list = []
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
@@ -94,9 +101,15 @@ def load_tables(path):
             columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
             # [0, 2, 5, 7, 9, 13, 18]
             columns_split_marker = [ index for index in range(len(columns_split)) if columns_split[index] == SPLIT_WORD]
-            tables_info[key]['columns_split'] = columns_split
-            tables_info[key]['columns_split_marker'] = columns_split_marker
-    return tables_info
+            if vocab:
+                columns_split_list.append(columns_split)
+            else:
+                tables_info[key]['columns_split'] = columns_split
+                tables_info[key]['columns_split_marker'] = columns_split_marker
+    if vocab:
+        return columns_split_list
+    else:
+        return tables_info
 
 
 def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_freq=1):
