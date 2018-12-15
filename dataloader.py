@@ -11,18 +11,20 @@ from utils import load_data, build_vocab
 
 class BindingDataset(Dataset):
     def __init__(self, mode, vocab):
+        # get path
         data_path, tables_path = preprocess_path + mode + '.jsonl', wikisql_path + mode + '.tables.jsonl'
+        # load data
         tokenize_list, tokenize_len_list, pos_tag_list = load_data(data_path)
         # check
         assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list)
+        # get len
         self.len = len(tokenize_list)
         
-        # utils.py - a
-        if vocab is None:
-            
-
+        # get columns
+        
+        # get labels
+        
         # pad (truncate?)
-
         
 
     def __getitem__(self, index):

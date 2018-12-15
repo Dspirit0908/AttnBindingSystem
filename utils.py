@@ -5,9 +5,18 @@ import nltk
 import torch
 import random
 import numpy as np
+from functools import reduce
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import WordPunctTokenizer
 from config import wikisql_path, preprocess_path
+
+UNK_WORD = '<unk>'
+PAD_WORD = '<blank>'
+BOS_WORD = '<s>'
+EOS_WORD = '</s>'
+SPLIT_WORD = '<|>'
+special_token_list = [UNK_WORD, PAD_WORD, BOS_WORD, EOS_WORD, SPLIT_WORD]
+special_token_vocab = dict(list(zip(special_token_list, list(range(len(special_token_list))))))
 
 
 def preprocess(mode):
@@ -36,6 +45,15 @@ def get_wikisql_tables_path(mode):
     return wikisql_path + mode + '.tables.jsonl'
 
 
+def read_tables(path):
+    tables_dict = {}
+    with open(path) as f:
+        for line in f:
+            d = json.loads(line.strip())
+            tables_dict[d['map_id']] = d
+    return tables_dict
+
+
 def load_data(path, only_tokenize=False):
     print('loading {}'.format(path))
     tokenize_list = []
@@ -61,7 +79,27 @@ def load_data(path, only_tokenize=False):
         return tokenize_list, tokenize_len_list, pos_tag_list
 
 
-def build_vocab(m_lists, pre_func=None, init_vocab=None, min_count=1):
+def load_tables(path):
+    print('loading {}'.format(path))
+    tables_info = {}
+    with open(path) as f:
+        for line in f:
+            info = json.loads(line.strip())
+            key = info['id']
+            if key not in tables_info:
+                tables_info[key] = {}
+            # [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
+            columns = list(map(lambda column: WordPunctTokenizer().tokenize(column), info['header']))
+            # ['<|>', 'Player', '<|>', 'No', '.', '<|>', 'Nationality', '<|>', 'Position', '<|>', 'Years', 'in', 'Toronto', '<|>', 'School', '/', 'Club', 'Team', '<|>']
+            columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
+            # [0, 2, 5, 7, 9, 13, 18]
+            columns_split_marker = [ index for index in range(len(columns_split)) if columns_split[index] == SPLIT_WORD]
+            tables_info[key]['columns_split'] = columns_split
+            tables_info[key]['columns_split_marker'] = columns_split_marker
+    return tables_info
+
+
+def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_freq=1):
     """
     :param m_lists: short for many lists, means list of list.
     :param pre_func: preprocess function for every word in a single list.
@@ -78,8 +116,11 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, min_count=1):
             word_count[word] = word_count.get(word, 0) + 1
 
     # filter rare words
-    new_word_count_keys = [key for key in word_count if word_count[key] >= min_count]
-    sorted_wc = sorted(new_word_count_keys, key=lambda x: word_count[x], reverse=True)
+    new_word_count_keys = [key for key in word_count if word_count[key] >= min_word_freq]
+    # sort
+    if sort:
+        new_word_count_keys = sorted(new_word_count_keys, key=lambda x: word_count[x], reverse=True)
+    # init
     index2word = {}
     if init_vocab is None:
         word2index = {}
@@ -89,8 +130,9 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, min_count=1):
         num = len(init_vocab)
         for k, v in word2index.items():
             index2word[v] = k
-    word2index.update(dict(list(zip(sorted_wc, list(range(num, num + len(sorted_wc)))))))
-    index2word.update(dict(list(zip(list(range(num, num + len(sorted_wc))), sorted_wc))))
+
+    word2index.update(dict(list(zip(new_word_count_keys, list(range(num, num + len(new_word_count_keys)))))))
+    index2word.update(dict(list(zip(list(range(num, num + len(new_word_count_keys))), new_word_count_keys))))
     return word2index, index2word
 
 
@@ -127,4 +169,4 @@ def set_seed(seed):
 if __name__ == '__main__':
     mode_list = ['train', 'dev', 'test']
     for mode in mode_list:
-        preprocess(mode)
+        load_tables(get_wikisql_tables_path(mode))
