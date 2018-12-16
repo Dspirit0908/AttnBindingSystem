@@ -3,6 +3,8 @@
 import torch
 import functools
 from config import Args
+from models.model import Model
+from train import train
 from dataloader import BindingDataset
 from torch.utils.data import Dataset, DataLoader
 from utils import get_preprocess_path, get_wikisql_tables_path, load_data, load_tables, build_vocab, build_all_vocab
@@ -21,7 +23,9 @@ def main():
     dev_dataloader = DataLoader(dataset=dev_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
     # load word embedding
     args.embed_matrix = None
-
+    # train
+    model = Model()
+    train(train_dataloader, dev_dataloader, args=args, model=model)
 
 
 if __name__ == '__main__':
