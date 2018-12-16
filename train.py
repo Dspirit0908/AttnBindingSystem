@@ -38,8 +38,8 @@ def train(train_loader, dev_loader, args, model):
 
             model.zero_grad()
             logit = model(inputs)
-            print(logit)
-            print(label)
+            print(logit.size())
+            print(label.size())
             loss = F.cross_entropy(logit, label)
             loss.backward()
             optimizer.step()

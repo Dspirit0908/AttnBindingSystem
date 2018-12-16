@@ -1,5 +1,6 @@
 # coding: utf-8
 
+import os
 import torch
 import functools
 from config import Args
@@ -11,6 +12,9 @@ from utils import build_all_vocab, set_seed
 
 
 def main():
+    # set environ, args, seed
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    torch.cuda.set_device(1)
     args = Args()
     set_seed(args.seed)
     # build vocab

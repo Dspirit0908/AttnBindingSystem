@@ -55,7 +55,7 @@ class Attention(nn.Module):
         else:
             raise NotImplementedError()
 
-    def forward(self, src, tgt, src_lengths=None, max_len=None):
+    def forward(self, src, tgt, src_lengths=None, src_max_len=None):
         """
         Args:
           src : source values (bz, src_len, dim)
@@ -74,7 +74,7 @@ class Attention(nn.Module):
         align_score = self.score(src, tgt)
 
         if src_lengths is not None:
-            mask = sequence_mask(src_lengths, max_len)
+            mask = sequence_mask(src_lengths, src_max_len)
             # (bz, max_len) -> (bz, 1, max_len)
             # so mask can broadcast
             mask = mask.unsqueeze(1)
@@ -83,7 +83,8 @@ class Attention(nn.Module):
             align_score.data.masked_fill_(1 - mask, -float('inf'))
 
         # Normalize weights
-        align_score = F.softmax(align_score, -1)
+        # bugs: softmax zero in the last can't get zero?
+        align_score = torch.softmax(align_score, -1)
 
         c = torch.bmm(align_score, src)
 
