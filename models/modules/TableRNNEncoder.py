@@ -2,15 +2,16 @@
 
 import torch
 import torch.nn as nn
+from utils import runBiRNN
 from torch.autograd import Variable
-from models.modules.utils import encode_unsorted_batch
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 
 
 class TableRNNEncoder(nn.Module):
-    def __init__(self, encoder, split_type='incell', merge_type='cat'):
+    def __init__(self, encoder, args, split_type='incell', merge_type='cat'):
         super(TableRNNEncoder, self).__init__()
+        self.args = args
         self.split_type = split_type
         self.merge_type = merge_type
         self.hidden_size = encoder.hidden_size
@@ -27,8 +28,9 @@ class TableRNNEncoder(nn.Module):
             :param tbl_len: length of token list (num_table_header, batch)
             :param tbl_split: table header boundary list
         """
-        tbl_context = encode_unsorted_batch(self.encoder, tbl, tbl_len)
+        tbl_context, _ = runBiRNN(self.encoder, tbl, tbl_len, total_length=self.args.column_token_max_len)
         # --> (num_table_header, batch, hidden_size * num_directions)
+        tbl_split = tbl_split.transpose(0, 1)
         if self.split_type == 'outcell':
             batch_index = torch.LongTensor(range(tbl_split.data.size(1))).unsqueeze_(
                 0).cuda().expand_as(tbl_split.data)
