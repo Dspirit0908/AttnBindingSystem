@@ -108,6 +108,7 @@ venv.bak/
 
 # data
 *.db
+*.json
 *.jsonl
 
 # Pycharm

@@ -5,16 +5,16 @@ import nltk
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from config import wikisql_path, preprocess_path
-from utils import load_data, build_vocab, load_tables, get_wikisql_tables_path
+from utils import get_wikisql_tables_path, get_preprocess_path
+from utils import load_data, load_tables, build_vocab
 
 
 class BindingDataset(Dataset):
-    def __init__(self, mode, vocab):
+    def __init__(self, mode, only_label):
         # get path
-        data_path, tables_path = preprocess_path + mode + '.jsonl', wikisql_path + mode + '.tables.jsonl'
+        data_path, tables_path = get_preprocess_path(mode), get_wikisql_tables_path(mode)
         # load data
-        tokenize_list, tokenize_len_list, pos_tag_list, table_id_list = load_data(data_path)
+        tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list = load_data(data_path, only_label=only_label)
         # get len
         self.len = len(tokenize_list)
         # read tables
@@ -44,4 +44,4 @@ class BindingDataset(Dataset):
 if __name__ == '__main__':
     mode_list = ['train', 'dev', 'test']
     for mode in mode_list:
-        dataset = BindingDataset(mode)
+        dataset = BindingDataset(mode, only_label=True)
