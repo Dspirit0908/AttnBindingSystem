@@ -11,10 +11,11 @@ label_path = data_path + 'label/'
 # hyperparameters
 class Args(object):
     def __init__(self):
+        self.seed = 1
         self.lr = 0.001
         self.weight_decay = 0.002
         self.epochs = 50
-        self.batch_size = 256
+        self.batch_size = 1
         self.log_trian_interval = 25
         self.log_test_interval = 5
         self.dropout_p = 0.1

@@ -3,59 +3,42 @@
 import torch
 from torch import nn
 from torchcrf import CRF
-from binding.utils import runBiRNN, sequence_mask
-from binding.config import more_feature_num
+from utils import runBiRNN, sequence_mask
+from models.modules.TableRNNEncoder import TableRNNEncoder
 from sklearn.metrics import confusion_matrix
 
 
 class Model(nn.Module):
     def __init__(self, args):
         super(Model, self).__init__()
+        # args
         self.args = args
         self.hidden_size = args.hidden_size
-        self.tokenFeatDim = len(args.tokenFeatDict)
-        self.posTagsDim = len(args.posTagsDict)
-
-        self.embedding = nn.Embedding(args.vocab_size, args.word_dim)
+        # embedding
+        self.token_embedding = nn.Embedding(args.vocab_size, args.word_dim)
         if args.embed_matrix is not None:
             self.embedding.weight = nn.Parameter(torch.FloatTensor(args.embed_matrix))
-        self.bi_lstm = nn.LSTM(args.word_dim + self.tokenFeatDim + more_feature_num + self.posTagsDim, args.hidden_size, bidirectional=True, batch_first=True,
+        # token_lstm
+        self.token_lstm = nn.LSTM(args.word_dim, args.hidden_size, bidirectional=True, batch_first=False,
                                num_layers=args.num_layers, dropout=args.dropout_p)
-        self.crf = CRF(args.class_num)
-        self.dropout = nn.Dropout(args.dropout_p)
-        self.fc = nn.Linear(2 * args.hidden_size, args.class_num)
+        # table_encoder
+        self.table_bilstm = nn.LSTM(args.word_dim, args.hidden_size, bidirectional=True, batch_first=False,
+                               num_layers=args.num_layers, dropout=args.dropout_p)
+        self.table_encoder = TableRNNEncoder(self.table_bilstm)
+        # fc
+        # self.fc = nn.Linear(2 * args.hidden_size, args.class_num)
 
-        self.fc_col = nn.Linear(args.max_len * args.class_num, args.col_num)
-
-        # self.bi_lstm = nn.LSTM(args.hidden_size, args.hidden_size,
-        #                        bidirectional=True, batch_first=True,
-        #                        num_layers=args.num_layers, dropout=args.dropout_p)
-        # self.w_fc = nn.Linear(args.word_dim, args.hidden_size, bias=False)
-        # self.u_fc = nn.Linear(self.tokenFeatDim + more_feature_num + self.posTagsDim, args.hidden_size, bias=False)
-        # self.v_fc = nn.Linear(args.hidden_size, args.hidden_size, bias=False)
-
-    def forward(self, inputs, labels):
-        questions, q_lens = inputs[0]
-        q_embed = self.embedding(questions)  # (B, L_Q, D)
-        batch_size = q_embed.size(0)
-        type = inputs[1][0]
-        pos_tags = inputs[2][0]
-        col_num_labels = inputs[3][0]
-        sql_labels = inputs[4][0]
-        # (B, L_Q)
-        flags = inputs[4][1]
-        # (B)
-
-        q_embed = torch.cat([q_embed, type, pos_tags], 2)
-        q_out, hidden = runBiRNN(self.bi_lstm, q_embed, q_lens, total_length=self.args.max_len)
-        # (B, L_Q, 2H) Bi-LSTM
-        q_out = q_out.transpose(0, 1)
-        # (L_Q, B, 2H)
-        q_out = self.fc(q_out)
-        # (L_Q, B, C)
-
-        # q_col = self.fc_col(q_out.transpose(0, 1).contiguous().view(batch_size, -1))
-        # col_loss = nn.functional.cross_entropy(q_col, col_num_labels)
-        sql_loss = nn.functional.cross_entropy(q_out.transpose(0, 1).transpose(1, 2), sql_labels, ignore_index=-100)
-        l_loss = nn.functional.cross_entropy(q_out.transpose(0, 1).transpose(1, 2), labels, ignore_index=-100)
-        return sql_loss
+    def forward(self, inputs):
+        # unpack inputs to data
+        tokenize, tokenize_len = inputs[0]
+        pos_tag = inputs[1][0]
+        columns_split, columns_split_len = inputs[2]
+        columns_split_marker, columns_split_marker_len = inputs[3]
+        # encode token
+        token_embed = self.token_embedding(tokenize).transpose(0, 1)  # (tokenize_max_len, batch_size, word_dim)
+        token_out, hidden = runBiRNN(self.token_lstm, token_embed, tokenize_len, total_length=self.args.tokenize_max_len)  # (tokenize_max_len, batch_size, 2*hidden_size), _
+        print(token_out.size())
+        # encode table
+        table_embed = self.table_encoder(columns_split, columns_split_len, columns_split_marker)
+        print(table_embed.size())
+        return

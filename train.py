@@ -28,16 +28,22 @@ def train(train_loader, dev_loader, args, model):
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
             inputs, label = data
-            label = Variable(label, device=args.device)
+            label = Variable(label)
+            if args.cuda:
+                label = label.cuda()
             for i in range(len(inputs)):
-                inputs[i][0] = Variable(inputs[i][0], device=args.device)
+                inputs[i][0] = Variable(inputs[i][0])
+                if args.cuda:
+                    inputs[i][0] = inputs[i][0].cuda()
 
             model.zero_grad()
             logit = model(inputs)
+            print(logit)
+            print(label)
             loss = F.cross_entropy(logit, label)
             loss.backward()
             optimizer.step()
-
+        
         if epoch % args.log_trian_interval == 0:
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
         if epoch % args.log_test_interval == 0:
@@ -51,9 +57,13 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
     correct, total = 0, 0
     for data in data_loader:
         inputs, label = data
-        label = Variable(label, device=args.device)
+        label = Variable(label)
+        if args.cuda:
+            label = label.cuda()
         for i in range(len(inputs)):
-            inputs[i][0] = Variable(inputs[i][0], device=args.device)
+            inputs[i][0] = Variable(inputs[i][0])
+            if args.cuda:
+                inputs[i][0] = inputs[i][0].cuda()
 
         logit = model(inputs)
         pred = torch.max(logit, 1)[1].data.cpu().numpy()
