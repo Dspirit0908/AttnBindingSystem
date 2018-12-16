@@ -122,7 +122,7 @@ def load_data(path, only_tokenize=False, only_label=False):
         return tokenize_list
     else:
         # check
-        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list)
+        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list) == len(label_list)
         return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list
 
 
@@ -203,30 +203,65 @@ def build_all_vocab():
         columns = load_columns_vocab(get_wikisql_tables_path(mode))
         all_columns.extend(columns)
     all_tokenize.extend(all_columns)
-    all_vocab = build_vocab(all_tokenize)
-    return all_vocab
+    word2index, index2word = build_vocab(all_tokenize)
+    return word2index, index2word
 
 
-def merge_dicts(dicts, copy=True):
-    """
-    :param dicts: a list of dict.
-    :param copy: copy dicts[0] for merge or use dicts[0] directly.
-    :return: a merged dict.
-    """
-    if copy:
-        dict_0 = dicts[0].copy()
-    else:
-        dict_0 = dicts[0]
-    max_value = max(dict_0.values())
-    for index in range(1, len(dicts)):
-        single_dict = dicts[index]
-        for key, value in single_dict:
-            if key in dict_0:
-                pass
-            else:
-                max_value += 1
-                dict_0[key] = max_value
-    return dict_0
+def change2idx(m_lists, vocab, oov_token=0, name='change2idx'):
+    idxs_list = []
+    oov_count, total = 0, 0
+    for s_list in m_lists:
+        # change2idx
+        idxs = []
+        for word in s_list:
+            if word not in vocab:
+                oov_count += 1
+            total += 1
+            idxs.append(vocab.get(word, oov_token))
+        idxs_list.append(idxs)
+    print('{}: oov_count - {}, total_count - {}'.format(name, oov_count, total))
+    return idxs_list
+
+
+def pad(m_lists, max_len, pad_token=0):
+    idxs_list = []
+    for s_list in m_lists:
+        if len(s_list) < max_len:
+            pad = [pad_token for _ in range(max_len - len(s_list))]
+            s_list.extend(pad)
+        else:
+            s_list = s_list[:max_len]
+        idxs_list.append(s_list)
+    return idxs_list
+
+
+def max_len_of_m_lists(m_lists):
+    max_len = 0
+    for s_list in m_lists:
+        max_len = max(max_len, len(s_list))
+    return max_len
+
+
+# def merge_dicts(dicts, copy=True):
+#     """
+#     :param dicts: a list of dict.
+#     :param copy: copy dicts[0] for merge or use dicts[0] directly.
+#     :return: a merged dict.
+#     """
+#     if copy:
+#         dict_0 = dicts[0].copy()
+#     else:
+#         dict_0 = dicts[0]
+#     max_value = max(dict_0.values())
+#     for index in range(1, len(dicts)):
+#         single_dict = dicts[index]
+#         for key, value in single_dict:
+#             if key in dict_0:
+#                 pass
+#             else:
+#                 max_value += 1
+#                 dict_0[key] = max_value
+#     return dict_0
 
 
 def set_seed(seed):
