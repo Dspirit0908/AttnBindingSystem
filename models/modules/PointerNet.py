@@ -19,7 +19,7 @@ class PointerNetRNNDecoder(nn.Module):
         
     def forward(self, tgt, memory_bank, hidden, memory_lengths=None):
         # RNN
-        rnn_output, hidden_final = self.lstm(tgt, hidden)
+        rnn_output, _ = self.lstm(tgt, hidden)
         # Attention
         rnn_output = rnn_output.transpose(0, 1)
         attn_h, align_score = self.attention(memory_bank, rnn_output, src_lengths=memory_lengths, src_max_len=self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1)

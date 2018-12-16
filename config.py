@@ -15,9 +15,9 @@ class Args(object):
         self.lr = 0.001
         self.weight_decay = 0.002
         self.epochs = 50
-        self.batch_size = 2
+        self.batch_size = 512
         self.log_trian_interval = 25
-        self.log_test_interval = 5
+        self.log_test_interval = 2
         self.dropout_p = 0.1
         self.load_w2v = False
         self.shuffle = False
@@ -27,3 +27,8 @@ class Args(object):
         self.hidden_size = 32
         self.num_layers = 1
         self.teacher_forcing_ratio = 0.5
+
+
+if __name__ == '__main__':
+    args = Args()
+    print(args.cuda)

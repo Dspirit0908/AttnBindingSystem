@@ -94,8 +94,7 @@ def preprocess(mode):
 
 def load_data(path, only_tokenize=False, only_label=False):
     print('loading {}'.format(path))
-    tokenize_list = []
-    tokenize_len_list = []
+    tokenize_list, tokenize_len_list = [], []
     pos_tag_list = []
     table_id_list = []
     label_list = []
@@ -333,6 +332,18 @@ def sequence_mask(lengths, max_len=None):
             .type_as(lengths)
             .repeat(batch_size, 1)
             .lt(lengths.unsqueeze(1)))
+
+
+def count_of_diff(l1, l2):
+    assert len(l1) == len(l2)
+    count_of_diff, index = 0, 0
+    wrong_indexs = []
+    for x, y in zip(l1, l2):
+        if x != y:
+            count_of_diff += 1
+            wrong_indexs.append(index)
+        index += 1
+    return count_of_diff, wrong_indexs
 
 
 if __name__ == '__main__':
