@@ -35,6 +35,8 @@ class Model(nn.Module):
         # point_net_decoder
         self.pointer_net_decoder = PointerNetRNNDecoder(self.args)
         # self.decoder_input_0 = nn.Parameter(torch.rand(self.args.batch_size, 2 * self.args.hidden_size), requires_grad=False)
+        # unk tensor
+        self.unk_tensor = nn.Parameter(torch.randn(self.args.batch_size, 1, 2*self.args.hidden_size))
 
     def forward(self, inputs):
         # unpack inputs to data
@@ -59,5 +61,5 @@ class Model(nn.Module):
         # point_net_decoder
         top_out = top_out.transpose(0, 1)
         memory_bank = torch.cat([top_out, table_out], dim=1)  # (batch_size, tokenize_max_len + columns_split_marker_max_len - 1, 2*hidden_size)
-        pointer_align_score = self.pointer_net_decoder(token_embed, memory_bank, top_hidden, self.args.tokenize_max_len + columns_split_marker_len - 1)  # (batch_size, tokenize_max_len, tokenize_max_len + columns_split_marker_max_len - 1)
+        pointer_align_score = self.pointer_net_decoder(token_embed, memory_bank, top_hidden, memory_lengths=self.args.tokenize_max_len + columns_split_marker_len - 1)  # (batch_size, tokenize_max_len, tokenize_max_len + columns_split_marker_max_len - 1)
         return pointer_align_score

@@ -76,7 +76,7 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
         total_pred, total_true = np.append(total_pred, pred), np.append(total_true, true)
     if epoch is not None:
         print('epoch {} cost_time {}'.format(epoch, (time.time() - s_time) / 60))
-    m_f1_score = f1_score(total_true, total_pred, average='macro')
+    m_f1_score = f1_score(total_true, total_pred, average='micro')
     print('correct: {}, total: {}'.format(correct, total))
     print('macro f1: {}'.format(m_f1_score))
     print(classification_report(total_true, total_pred))
