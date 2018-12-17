@@ -39,8 +39,9 @@ def train(train_loader, dev_loader, args, model):
                     inputs[i][0] = inputs[i][0].cuda()
 
             model.zero_grad()
-            logit = model(inputs).transpose(1, 2)
-            loss = F.cross_entropy(logit, label, ignore_index=-100)
+            logit = model(inputs)
+            loss = F.cross_entropy(logit.transpose(1, 2), label, ignore_index=-100)
+            print(loss)
             loss.backward()
             optimizer.step()
         
@@ -78,7 +79,7 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
         print('epoch {} cost_time {}'.format(epoch, (time.time() - s_time) / 60))
     m_f1_score = f1_score(total_true, total_pred, average='micro')
     print('correct: {}, total: {}'.format(correct, total))
-    print('macro f1: {}'.format(m_f1_score))
+    print('micro f1: {}'.format(m_f1_score))
     print(classification_report(total_true, total_pred))
     # print(confusion_matrix(total_true, total_pred))
     return correct, total

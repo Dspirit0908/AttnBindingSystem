@@ -103,8 +103,8 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-# word_embedding
-*.300d.txt
+# txt
+*.txt
 
 # data
 *.db

@@ -28,7 +28,9 @@ def main():
     args.tokenize_max_len, args.column_token_max_len, args.columns_split_marker_max_len, args.pos_tag_vocab = \
         train_dataset.tokenize_max_len, train_dataset.column_token_max_len, train_dataset.columns_split_marker_max_len, train_dataset.pos_tag_vocab
     # build dev_dataloader
-    dev_dataset = BindingDataset('dev', only_label=True, vocab=word2index, data_from_train=data_from_train)
+    train_dataset = BindingDataset('dev', only_label=True, vocab=word2index, data_from_train=data_from_train)
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
+    dev_dataset = BindingDataset('test', only_label=True, vocab=word2index, data_from_train=data_from_train)
     dev_dataloader = DataLoader(dataset=dev_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
     # load word embedding
     args.embed_matrix = None

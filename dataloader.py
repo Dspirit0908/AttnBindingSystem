@@ -44,8 +44,8 @@ class BindingDataset(Dataset):
             pointer_label = []
             for index, single_label in enumerate(label):
                 if single_label == 'UNK':
-                    # pointer_label.append(self.tokenize_max_len + self.columns_split_marker_max_len)
-                    pointer_label.append(index)
+                    pointer_label.append(self.tokenize_max_len + self.columns_split_marker_max_len)
+                    # pointer_label.append(-100)
                 else:
                     single_label_split = single_label.split('_')
                     if single_label_split[0] == 'Value':
