@@ -44,14 +44,16 @@ class BindingDataset(Dataset):
             pointer_label = []
             for index, single_label in enumerate(label):
                 if single_label == 'UNK':
-                    pointer_label.append(self.tokenize_max_len + self.columns_split_marker_max_len)
-                    # pointer_label.append(-100)
+                    # pointer_label.append(self.tokenize_max_len + self.columns_split_marker_max_len - 1)
+                    pointer_label.append(-100)
                 else:
                     single_label_split = single_label.split('_')
                     if single_label_split[0] == 'Value':
                         pointer_label.append(int(single_label_split[1]))
+                        # pointer_label.append(-100)
                     elif single_label_split[0] == 'Column':
                         pointer_label.append(self.tokenize_max_len + int(single_label_split[1]))
+                        # pointer_label.append(index)
             pointer_label_list.append(pointer_label)
         # change2tensor
         self.tokenize_tensor = torch.LongTensor(pad(change2idx(tokenize_list, vocab=vocab), max_len=self.tokenize_max_len), device=device)
@@ -59,8 +61,8 @@ class BindingDataset(Dataset):
         self.pos_tag_tensor = torch.LongTensor(pad(change2idx(pos_tag_list, vocab=self.pos_tag_vocab), max_len=self.tokenize_max_len), device=device)
         self.columns_split_tensor = torch.LongTensor(pad(change2idx(columns_split_list, vocab=vocab), max_len=self.column_token_max_len), device=device)
         self.columns_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.column_token_max_len), columns_split_len_list)), device=device)
-        self.columns_split_marker_tensor = torch.LongTensor(pad(columns_split_marker_list, max_len=self.columns_split_marker_max_len, pad_token=self.column_token_max_len), device=device)
-        self.columns_split_marker_len_tensor =torch.LongTensor(list(map(lambda len: min(len, self.columns_split_marker_max_len), columns_split_marker_len_list)), device=device)
+        self.columns_split_marker_tensor = torch.LongTensor(pad(columns_split_marker_list, max_len=self.columns_split_marker_max_len, pad_token=self.column_token_max_len - 1), device=device)
+        self.columns_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_split_marker_max_len), columns_split_marker_len_list)), device=device)
         self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=-100), device=device)
 
     def __getitem__(self, index):
@@ -84,6 +86,7 @@ if __name__ == '__main__':
             dataset = BindingDataset(mode, only_label=True, vocab=word2index)
             train_dataloader = DataLoader(dataset=dataset, batch_size=32)
             data_from_train = (dataset.tokenize_max_len, dataset.column_token_max_len, dataset.columns_split_marker_max_len, dataset.pos_tag_vocab)
+            print(data_from_train)
         else:
             dataset = BindingDataset(mode, only_label=True, vocab=word2index, data_from_train=data_from_train)
             dataloader = DataLoader(dataset=dataset, batch_size=32)

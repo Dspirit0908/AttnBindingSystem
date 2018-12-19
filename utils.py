@@ -305,19 +305,19 @@ def runBiRNN(rnn, inputs, seq_lengths, hidden=None, total_length=None):
 
     res, hidden = rnn(packed_inputs, hidden)
 
-    if isinstance(hidden, tuple):
-        hidden = list(hidden)
-        hidden[0] = hidden[0][:, desorted_indices]
-        hidden[1] = hidden[1][:, desorted_indices]
-    else:
-        hidden = hidden[:, desorted_indices]
-
     padded_res, _ = nn.utils.rnn.pad_packed_sequence(res, batch_first=batch_first, total_length=total_length)
     # 恢复排序前的样本顺序
     if batch_first:
         desorted_res = padded_res[desorted_indices]
     else:
         desorted_res = padded_res[:, desorted_indices]
+    
+    if isinstance(hidden, tuple):
+        hidden = list(hidden)
+        hidden[0] = hidden[0][:, desorted_indices]
+        hidden[1] = hidden[1][:, desorted_indices]
+    else:
+        hidden = hidden[:, desorted_indices]
 
     return desorted_res, hidden
 
@@ -349,4 +349,4 @@ def count_of_diff(l1, l2):
 if __name__ == '__main__':
     mode_list = ['train', 'dev', 'test']
     for mode in mode_list:
-        preprocess(mode)
+        load_tables(get_wikisql_tables_path(mode))

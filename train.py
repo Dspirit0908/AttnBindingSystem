@@ -1,9 +1,11 @@
 # coding: utf-8
 
+import sys
 import time
 import json
 import torch
 import random
+import logging
 import operator
 import numpy as np
 from torch.autograd import Variable
@@ -14,7 +16,9 @@ from utils import count_of_diff
 from tensorboardX import SummaryWriter
 from sklearn.metrics import f1_score, classification_report, confusion_matrix, accuracy_score
 from sklearn.utils.multiclass import unique_labels
+
 np.set_printoptions(threshold=np.inf)
+logger = logging.getLogger('binding')
 
 
 def train(train_loader, dev_loader, args, model):
@@ -27,6 +31,7 @@ def train(train_loader, dev_loader, args, model):
     model.train()
 
     best_correct = 0
+    CE = torch.nn.CrossEntropyLoss(ignore_index=-100)
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
             inputs, label = data
@@ -39,11 +44,26 @@ def train(train_loader, dev_loader, args, model):
                     inputs[i][0] = inputs[i][0].cuda()
 
             model.zero_grad()
+            optimizer.zero_grad()
             logit = model(inputs)
-            loss = F.cross_entropy(logit.transpose(1, 2), label, ignore_index=-100)
-            print(loss)
+            loss = CE(logit.permute(0, 2, 1).contiguous(), label)
+            # logger.info(logit)
+            # loss = 0
+            # for ti in range(logit.size()[1]):
+            #     loss += CE(logit[:, ti], label[:, ti])
+            #     logger.info(logit[:, ti])
+            #     logger.info(label[:, ti])
+            #     logger.info(CE(logit[:, ti], label[:, ti]))
+            # loss /= logit.size()[0]
+            # logger.info('pred')
+            # logger.info(torch.max(logit, 2)[1].data.cpu().numpy())
+            # logger.info('label')
+            # logger.info(label.data.cpu().numpy())
+            logger.info('loss')
+            logger.info(loss)
             loss.backward()
             optimizer.step()
+            # sys.exit()
         
         if epoch % args.log_trian_interval == 0:
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
@@ -54,6 +74,7 @@ def train(train_loader, dev_loader, args, model):
 
 
 def eval(data_loader, args, model, epoch=None, s_time=time.time()):
+    print('eval')
     total_pred, total_true = np.array([]), np.array([])
     correct, total = 0, 0
     for data in data_loader:
@@ -67,19 +88,30 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
                 inputs[i][0] = inputs[i][0].cuda()
 
         logit = model(inputs)
+        tokenize_len = inputs[0][1]
         logit = torch.max(logit, 2)[1]
         pred = logit.data.cpu().numpy()
         true = label.data.cpu().numpy()
         for i in range(len(pred)):
-            if count_of_diff(pred[i], true[i]) == 0:
+            pred_truncate, true_truncate = pred[i][:tokenize_len[i]], true[i][:tokenize_len[i]]
+            # print(pred_truncate, true_truncate)
+            # print(count_of_diff(pred_truncate, true_truncate))
+            if count_of_diff(pred_truncate, true_truncate)[0] == 0:
                 correct += 1
             total += 1
-        total_pred, total_true = np.append(total_pred, pred), np.append(total_true, true)
+            total_pred, total_true = np.append(total_pred, pred_truncate), np.append(total_true, true_truncate)
     if epoch is not None:
         print('epoch {} cost_time {}'.format(epoch, (time.time() - s_time) / 60))
-    m_f1_score = f1_score(total_true, total_pred, average='micro')
+    trunc_true, trunc_pred = [], []
+    for t, p in zip(total_true, total_pred):
+        if t == -100:
+            continue
+        else:
+            trunc_true.append(t), trunc_pred.append(p)
+    # total_true, total_pred = [c for c in total_true if c != -100], [c for c in total_pred if c != -100]
+    m_f1_score = f1_score(trunc_true, trunc_pred, average='micro')
     print('correct: {}, total: {}'.format(correct, total))
     print('micro f1: {}'.format(m_f1_score))
-    print(classification_report(total_true, total_pred))
-    # print(confusion_matrix(total_true, total_pred))
+    print(classification_report(trunc_true, trunc_pred))
+    print(confusion_matrix(trunc_true, trunc_pred))
     return correct, total
