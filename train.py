@@ -11,9 +11,7 @@ import numpy as np
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torch import nn
-from torchcrf import CRF
 from utils import count_of_diff
-from tensorboardX import SummaryWriter
 from sklearn.metrics import f1_score, classification_report, confusion_matrix, accuracy_score
 from sklearn.utils.multiclass import unique_labels
 
@@ -35,13 +33,9 @@ def train(train_loader, dev_loader, args, model):
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
             inputs, label = data
-            label = Variable(label)
-            if args.cuda:
-                label = label.cuda()
+            label = Variable(label).to(args.device)
             for i in range(len(inputs)):
-                inputs[i][0] = Variable(inputs[i][0])
-                if args.cuda:
-                    inputs[i][0] = inputs[i][0].cuda()
+                inputs[i][0] = Variable(inputs[i][0]).to(args.device)
 
             model.zero_grad()
             optimizer.zero_grad()
@@ -79,13 +73,9 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
     correct, total = 0, 0
     for data in data_loader:
         inputs, label = data
-        label = Variable(label)
-        if args.cuda:
-            label = label.cuda()
+        label = Variable(label).to(args.device)
         for i in range(len(inputs)):
-            inputs[i][0] = Variable(inputs[i][0])
-            if args.cuda:
-                inputs[i][0] = inputs[i][0].cuda()
+            inputs[i][0] = Variable(inputs[i][0]).to(args.device)
 
         logit = model(inputs)
         tokenize_len = inputs[0][1]
@@ -94,7 +84,7 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
         true = label.data.cpu().numpy()
         for i in range(len(pred)):
             true_truncate, pred_truncate = [], []
-            for t, p in true[i], pred[i]:
+            for t, p in zip(true[i], pred[i]):
                 if t == -100:
                     continue
                 else:

@@ -14,8 +14,7 @@ from utils import build_all_vocab, set_seed, max_len_of_m_lists
 
 def main():
     # set environ, args, seed, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = "6"
-    torch.cuda.set_device(6)
+    os.environ["CUDA_VISIBLE_DEVICES"] = "7"
     args = Args()
     set_seed(args.seed)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

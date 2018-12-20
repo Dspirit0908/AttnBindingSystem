@@ -6,7 +6,6 @@ import random
 import logging
 import numpy as np
 from torch import nn
-from torchcrf import CRF
 from utils import runBiRNN, sequence_mask
 from models.modules.TableRNNEncoder import TableRNNEncoder
 from models.modules.Attention import Attention

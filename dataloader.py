@@ -56,14 +56,14 @@ class BindingDataset(Dataset):
                         # pointer_label.append(index)
             pointer_label_list.append(pointer_label)
         # change2tensor
-        self.tokenize_tensor = torch.LongTensor(pad(change2idx(tokenize_list, vocab=vocab), max_len=self.tokenize_max_len), device=device)
-        self.tokenize_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.tokenize_max_len), tokenize_len_list)), device=device)
-        self.pos_tag_tensor = torch.LongTensor(pad(change2idx(pos_tag_list, vocab=self.pos_tag_vocab), max_len=self.tokenize_max_len), device=device)
-        self.columns_split_tensor = torch.LongTensor(pad(change2idx(columns_split_list, vocab=vocab), max_len=self.column_token_max_len), device=device)
-        self.columns_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.column_token_max_len), columns_split_len_list)), device=device)
-        self.columns_split_marker_tensor = torch.LongTensor(pad(columns_split_marker_list, max_len=self.columns_split_marker_max_len, pad_token=self.column_token_max_len - 1), device=device)
-        self.columns_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_split_marker_max_len), columns_split_marker_len_list)), device=device)
-        self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=-100), device=device)
+        self.tokenize_tensor = torch.LongTensor(pad(change2idx(tokenize_list, vocab=vocab), max_len=self.tokenize_max_len)).to(device)
+        self.tokenize_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.tokenize_max_len), tokenize_len_list))).to(device)
+        self.pos_tag_tensor = torch.LongTensor(pad(change2idx(pos_tag_list, vocab=self.pos_tag_vocab), max_len=self.tokenize_max_len)).to(device)
+        self.columns_split_tensor = torch.LongTensor(pad(change2idx(columns_split_list, vocab=vocab), max_len=self.column_token_max_len)).to(device)
+        self.columns_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.column_token_max_len), columns_split_len_list))).to(device)
+        self.columns_split_marker_tensor = torch.LongTensor(pad(columns_split_marker_list, max_len=self.columns_split_marker_max_len, pad_token=self.column_token_max_len - 1)).to(device)
+        self.columns_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_split_marker_max_len), columns_split_marker_len_list))).to(device)
+        self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=-100)).to(device)
 
     def __getitem__(self, index):
         return (
