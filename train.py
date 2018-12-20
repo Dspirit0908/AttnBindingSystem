@@ -21,7 +21,7 @@ logger = logging.getLogger('binding')
 
 def train(train_loader, dev_loader, args, model):
     s_time = time.time()
-    print('train... {}'.format(str(s_time)))
+    print('start train... {}'.format(time.strftime('%H:%M:%S',time.localtime(time.time()))))
     if args.cuda:
         model.cuda()
     # large_lr_layers = list(map(id, model.fc.parameters()))
@@ -41,20 +41,12 @@ def train(train_loader, dev_loader, args, model):
             optimizer.zero_grad()
             logit = model(inputs)
             loss = CE(logit.permute(0, 2, 1).contiguous(), label)
-            # logger.info(logit)
             # loss = 0
             # for ti in range(logit.size()[1]):
             #     loss += CE(logit[:, ti], label[:, ti])
-            #     logger.info(logit[:, ti])
-            #     logger.info(label[:, ti])
-            #     logger.info(CE(logit[:, ti], label[:, ti]))
             # loss /= logit.size()[0]
-            # logger.info('pred')
-            # logger.info(torch.max(logit, 2)[1].data.cpu().numpy())
-            # logger.info('label')
-            # logger.info(label.data.cpu().numpy())
-            logger.info('loss')
-            logger.info(loss)
+            logger.debug('loss')
+            logger.debug(loss)
             loss.backward()
             optimizer.step()
             # sys.exit()

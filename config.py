@@ -5,7 +5,7 @@ import torch
 data_path = './data/'
 wikisql_path = data_path + 'wikisql/'
 preprocess_path = data_path + 'preprocess/'
-label_path = data_path + 'label/'
+word_embedding_path = data_path + 'glove.6B.300d.txt'
 
 
 # hyperparameters
@@ -19,14 +19,15 @@ class Args(object):
         self.log_trian_interval = 50
         self.log_test_interval = 10
         self.dropout_p = 0.1
-        self.load_w2v = False
+        self.load_w2v = True
         self.shuffle = True
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.cuda = True if str(self.device) == 'cuda' else False
-        self.word_dim = 100
+        self.word_dim = 300
         self.hidden_size = 100
         self.num_layers = 1
         self.teacher_forcing_ratio = 1.0
+        self.embed_matrix = None
 
 
 if __name__ == '__main__':

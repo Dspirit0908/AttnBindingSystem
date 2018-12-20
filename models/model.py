@@ -28,7 +28,9 @@ class Model(nn.Module):
         # embedding
         self.token_embedding = nn.Embedding(args.vocab_size, args.word_dim)
         if args.embed_matrix is not None:
-            self.embedding.weight = nn.Parameter(torch.FloatTensor(args.embed_matrix))
+            self.token_embedding.weight = nn.Parameter(torch.FloatTensor(args.embed_matrix))
+        # pos_tag embedding
+        self.pos_tag_embedding = nn.Embedding(len(args.pos_tag_vocab), args.word_dim)
         # token_lstm
         self.token_lstm = nn.LSTM(args.word_dim, args.hidden_size, bidirectional=True, batch_first=False,
                                num_layers=args.num_layers, dropout=args.dropout_p)
@@ -66,6 +68,10 @@ class Model(nn.Module):
         token_embed = token_embed.transpose(0, 1).contiguous()  # (tokenize_max_len, batch_size, word_dim)
         logger.debug('token_embed')
         logger.debug(token_embed)
+        # add pos_tag on token_embed
+        pos_tag_embed = self.pos_tag_embedding(pos_tag).transpose(0, 1).contiguous()  # (tokenize_max_len, batch_size, word_dim)
+        token_embed += pos_tag_embed
+        # run token lstm
         token_out, token_hidden = runBiRNN(self.token_lstm, token_embed, tokenize_len, total_length=self.args.tokenize_max_len)  # (tokenize_max_len, batch_size, 2*hidden_size), _
         logger.debug('token_out')
         logger.debug(token_out)
@@ -77,7 +83,7 @@ class Model(nn.Module):
         logger.debug('table_out')
         logger.debug(table_out)
         memory_bank = torch.cat([token_out, table_out], dim=0).transpose(0, 1).contiguous()
-        # unk_tensor = self.unk_tensor.unsqueeze(0).expand(batch_size, 1, -1)
+        unk_tensor = self.unk_tensor.unsqueeze(0).expand(batch_size, 1, -1)
         # memory_bank = torch.cat([memory_bank, unk_tensor], dim=1)
         logger.debug('memory_bank')
         logging.debug(memory_bank)

@@ -7,10 +7,11 @@ import random
 import functools
 import numpy as np
 from torch import nn
+from gensim.models import KeyedVectors
 from functools import reduce
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import WordPunctTokenizer
-from config import wikisql_path, preprocess_path, label_path
+from config import wikisql_path, preprocess_path, word_embedding_path
 
 UNK_WORD = '<unk>'
 PAD_WORD = '<blank>'
@@ -152,6 +153,29 @@ def load_tables(path, vocab=False):
         return columns_split_list
     else:
         return tables_info
+
+
+def load_word_embedding(word_dim, vocab, max_vocab_size=None):
+    embedding_model = KeyedVectors.load_word2vec_format(word_embedding_path)
+    vocab_size = len(vocab) if max_vocab_size is None else max_vocab_size
+    embed_matrix = np.random.uniform(-0.25, 0.25, size=(vocab_size, word_dim))
+    for word, i in vocab.items():
+        if i >= vocab_size:
+            continue
+        if word in embedding_model:
+            embedding_vector = embedding_model[word]
+            if embedding_vector is not None:
+                embed_matrix[i] = embedding_vector
+        else:
+            pass
+            # w_count = 0
+            # for w in word.split(' '):
+            #     if w in embedding_model:
+            #         w_count += 1
+            #         embed_matrix[i] += embedding_model[w]
+            # if w_count != 0:
+            #     embed_matrix[i] /= w_count
+    return embed_matrix
 
 
 def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_freq=1):
@@ -344,6 +368,10 @@ def count_of_diff(l1, l2):
             wrong_indexs.append(index)
         index += 1
     return count_of_diff, wrong_indexs
+
+
+def compare_sql_col():
+    pass
 
 
 if __name__ == '__main__':
