@@ -93,25 +93,22 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
         pred = logit.data.cpu().numpy()
         true = label.data.cpu().numpy()
         for i in range(len(pred)):
-            pred_truncate, true_truncate = pred[i][:tokenize_len[i]], true[i][:tokenize_len[i]]
-            # print(pred_truncate, true_truncate)
-            # print(count_of_diff(pred_truncate, true_truncate))
+            true_truncate, pred_truncate = [], []
+            for t, p in true[i], pred[i]:
+                if t == -100:
+                    continue
+                else:
+                    true_truncate.append(t), pred_truncate.append(p)
             if count_of_diff(pred_truncate, true_truncate)[0] == 0:
                 correct += 1
             total += 1
-            total_pred, total_true = np.append(total_pred, pred_truncate), np.append(total_true, true_truncate)
+            total_true, total_pred = np.append(total_true, true_truncate), np.append(total_pred, pred_truncate)
     if epoch is not None:
         print('epoch {} cost_time {}'.format(epoch, (time.time() - s_time) / 60))
-    trunc_true, trunc_pred = [], []
-    for t, p in zip(total_true, total_pred):
-        if t == -100:
-            continue
-        else:
-            trunc_true.append(t), trunc_pred.append(p)
-    # total_true, total_pred = [c for c in total_true if c != -100], [c for c in total_pred if c != -100]
-    m_f1_score = f1_score(trunc_true, trunc_pred, average='micro')
+    
+    m_f1_score = f1_score(total_true, total_pred, average='micro')
     print('correct: {}, total: {}'.format(correct, total))
     print('micro f1: {}'.format(m_f1_score))
-    print(classification_report(trunc_true, trunc_pred))
-    print(confusion_matrix(trunc_true, trunc_pred))
+    print(classification_report(total_true, total_pred))
+    print(confusion_matrix(total_true, total_pred))
     return correct, total
