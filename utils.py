@@ -93,7 +93,7 @@ def preprocess(mode):
             out_f.write(json.dumps(info) + '\n')
 
 
-def load_data(path, only_tokenize=False, only_label=False):
+def load_data(path, only_tokenize=False, only_label=False, lower=True):
     print('loading {}'.format(path))
     tokenize_list, tokenize_len_list = [], []
     pos_tag_list = []
@@ -102,7 +102,10 @@ def load_data(path, only_tokenize=False, only_label=False):
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
-            tokenize = info['tokenize']
+            if lower:
+                tokenize = [word.lower() for word in info['tokenize']]
+            else:
+                tokenize = info['tokenize']
             pos_tag = info['pos_tag']
             table_id = info['table_id']
             label = info['label']
@@ -127,7 +130,7 @@ def load_data(path, only_tokenize=False, only_label=False):
         return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list
 
 
-def load_tables(path, vocab=False):
+def load_tables(path, vocab=False, lower=True):
     print('loading {}'.format(path))
     tables_info = {}
     # for vocab
@@ -138,8 +141,11 @@ def load_tables(path, vocab=False):
             key = info['id']
             if key not in tables_info:
                 tables_info[key] = {}
-            # [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
-            columns = list(map(lambda column: WordPunctTokenizer().tokenize(column), info['header']))
+            if lower:
+                columns = list(map(lambda column: WordPunctTokenizer().tokenize(column.lower()), info['header']))
+            else:
+                # [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
+                columns = list(map(lambda column: WordPunctTokenizer().tokenize(column), info['header']))
             # ['<|>', 'Player', '<|>', 'No', '.', '<|>', 'Nationality', '<|>', 'Position', '<|>', 'Years', 'in', 'Toronto', '<|>', 'School', '/', 'Club', 'Team', '<|>']
             columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
             # [0, 2, 5, 7, 9, 13, 18]
@@ -376,5 +382,10 @@ def compare_sql_col():
 
 if __name__ == '__main__':
     mode_list = ['train', 'dev', 'test']
-    for mode in mode_list:
-        load_tables(get_wikisql_tables_path(mode))
+    table_id_set_list = []
+    for index, mode in enumerate(mode_list):
+        table_id_set_list.append(set(load_tables(get_wikisql_tables_path(mode)).keys()))
+        print(len(table_id_set_list[index]))
+    print(len(table_id_set_list[0] - table_id_set_list[1]))
+    print(len(table_id_set_list[0] - table_id_set_list[2]))
+    print(len(table_id_set_list[1] - table_id_set_list[2]))

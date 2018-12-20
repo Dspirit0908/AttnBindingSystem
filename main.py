@@ -38,7 +38,7 @@ def main():
     # train
     model = Model(args)
     train(train_dataloader, dev_dataloader, args=args, model=model)
-    print('one lstm, add pos_tag and glove(glove.6B.300d.txt)')
+    print('one lstm, add pos_tag and lower column name and token')
 
 
 if __name__ == '__main__':

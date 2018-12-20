@@ -19,7 +19,7 @@ class Args(object):
         self.log_trian_interval = 50
         self.log_test_interval = 10
         self.dropout_p = 0.1
-        self.load_w2v = True
+        self.load_w2v = False
         self.shuffle = True
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.cuda = True if str(self.device) == 'cuda' else False
