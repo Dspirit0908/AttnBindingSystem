@@ -24,6 +24,7 @@ def train(train_loader, dev_loader, args, model):
     print('start train... {}'.format(time.strftime('%H:%M:%S',time.localtime(time.time()))))
     if args.cuda:
         model.cuda()
+    # model.apply(init_parameters)
     # large_lr_layers = list(map(id, model.fc.parameters()))
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()

@@ -73,12 +73,19 @@ def preprocess(mode):
                 # need check word tokenize
                 if len(info['tokenize']) == len(the_label_info):
                     try:
+                        # get cells
+                        cells = set()
+                        for s_list in table_info[info['table_id']]['rows']:
+                            for word in s_list:
+                                cells.add(str(word))
+                        cells = [word.lower() for word in list(cells)]
                         for index, label in enumerate(the_label_info):
                             label_split = label.split('_')
                             if label_split[0] in UNK_TERM:
                                 info['label'].append('UNK')
                             elif label_split[0] == 'ValueTerm' or label_split[0] == 'NumberRangeTerm':
-                                info['label'].append('Value_' + str(index))
+                                value = '_'.join(label_split[1:-2]).lower()
+                                info['label'].append('Value_' + str(cells.index(value)))
                             elif label_split[0] == 'ColumnTerm':
                                 column = '_'.join(label_split[1:-2])
                                 info['label'].append('Column_' + str(table_info[info['table_id']]['header'].index(column)))
@@ -130,33 +137,46 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
         return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list
 
 
-def load_tables(path, vocab=False, lower=True):
+def load_tables(path, vocab=False, lower=True, load_cell=True):
     print('loading {}'.format(path))
     tables_info = {}
     # for vocab
-    columns_split_list = []
+    vocab_list = []
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
             key = info['id']
             if key not in tables_info:
                 tables_info[key] = {}
-            if lower:
-                columns = list(map(lambda column: WordPunctTokenizer().tokenize(column.lower()), info['header']))
-            else:
-                # [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
-                columns = list(map(lambda column: WordPunctTokenizer().tokenize(column), info['header']))
-            # ['<|>', 'Player', '<|>', 'No', '.', '<|>', 'Nationality', '<|>', 'Position', '<|>', 'Years', 'in', 'Toronto', '<|>', 'School', '/', 'Club', 'Team', '<|>']
-            columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
-            # [0, 2, 5, 7, 9, 13, 18]
-            columns_split_marker = [ index for index in range(len(columns_split)) if columns_split[index] == SPLIT_WORD]
+            # read cells from m_lists to a list
+            if load_cell:
+                cells = set()
+                for s_list in info['rows']:
+                    for word in s_list:
+                        cells.add(str(word))
+                cells = list(cells)
+            # handle columns and cells
+            def _handle(iter, lower):
+                if lower:
+                    columns = list(map(lambda column: WordPunctTokenizer().tokenize(str(column).lower()), iter))
+                else:
+                    # [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
+                    columns = list(map(lambda column: WordPunctTokenizer().tokenize(str(column)), info['header']))
+                # ['<|>', 'Player', '<|>', 'No', '.', '<|>', 'Nationality', '<|>', 'Position', '<|>', 'Years', 'in', 'Toronto', '<|>', 'School', '/', 'Club', 'Team', '<|>']
+                columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
+                # [0, 2, 5, 7, 9, 13, 18]
+                columns_split_marker = [index for index in range(len(columns_split)) if columns_split[index] == SPLIT_WORD]
+                return columns_split, columns_split_marker
+            
             if vocab:
-                columns_split_list.append(columns_split)
+                vocab_list.append(_handle(info['header'], lower)[0])
+                vocab_list.append(_handle(cells, lower)[0])
             else:
-                tables_info[key]['columns_split'] = columns_split
-                tables_info[key]['columns_split_marker'] = columns_split_marker
+                tables_info[key]['columns_split'], tables_info[key]['columns_split_marker'] = _handle(info['header'], lower)
+                if load_cell:
+                    tables_info[key]['cells_split'], tables_info[key]['cells_split_marker'] = _handle(cells, lower)
     if vocab:
-        return columns_split_list
+        return vocab_list
     else:
         return tables_info
 
@@ -221,19 +241,18 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_fre
     return word2index, index2word
 
 
-def build_all_vocab():
+def build_all_vocab(min_word_freq=1):
     # need to know all the words to filter the pretrained word embeddings
     load_only_tokenize = functools.partial(load_data, only_tokenize=True)
-    load_columns_vocab = functools.partial(load_tables, vocab=True)
+    load_tables_vocab = functools.partial(load_tables, vocab=True)
     mode_list = ['train', 'dev', 'test']
-    all_tokenize, all_columns = [], []
+    all_tokenize = []
     for mode in mode_list:
         tokenize = load_only_tokenize(get_preprocess_path(mode))
         all_tokenize.extend(tokenize)
-        columns = load_columns_vocab(get_wikisql_tables_path(mode))
-        all_columns.extend(columns)
-    all_tokenize.extend(all_columns)
-    word2index, index2word = build_vocab(all_tokenize)
+        vocab = load_tables_vocab(get_wikisql_tables_path(mode))
+        all_tokenize.extend(vocab)
+    word2index, index2word = build_vocab(all_tokenize, min_word_freq=min_word_freq)
     return word2index, index2word
 
 
@@ -300,6 +319,16 @@ def set_seed(seed):
     torch.cuda.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
+
+
+def aeq(*args):
+    """
+    Assert all arguments have the same value
+    """
+    arguments = (arg for arg in args)
+    first = next(arguments)
+    assert all(arg == first for arg in arguments), \
+        "Not all arguments have the same value: " + str(args)
 
 
 def runBiRNN(rnn, inputs, seq_lengths, hidden=None, total_length=None):
@@ -376,7 +405,7 @@ def count_of_diff(l1, l2):
     return count_of_diff, wrong_indexs
 
 
-def compare_sql_col():
+def compare_sql():
     pass
 
 
@@ -384,8 +413,4 @@ if __name__ == '__main__':
     mode_list = ['train', 'dev', 'test']
     table_id_set_list = []
     for index, mode in enumerate(mode_list):
-        table_id_set_list.append(set(load_tables(get_wikisql_tables_path(mode)).keys()))
-        print(len(table_id_set_list[index]))
-    print(len(table_id_set_list[0] - table_id_set_list[1]))
-    print(len(table_id_set_list[0] - table_id_set_list[2]))
-    print(len(table_id_set_list[1] - table_id_set_list[2]))
+        preprocess(mode)

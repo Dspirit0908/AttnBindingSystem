@@ -45,7 +45,7 @@ class Model(nn.Module):
                                   num_layers=args.num_layers, dropout=args.dropout_p)
         # point_net_decoder
         # self.pointer_net_decoder = Decoder(embedding_dim=2*self.args.hidden_size, hidden_dim=2*self.args.hidden_size, cuda=self.args.cuda)
-        self.pointer_net_decoder = PointerNetRNNDecoder(self.args)
+        self.pointer_net_decoder = PointerNetRNNDecoder(self.args, input_dim=self.args.word_dim)
         self.attn_decoder = AttnDecoderRNN(self.args)
         self.decoder_input = nn.Parameter(torch.zeros(1, 2*self.args.hidden_size), requires_grad=False).to(self.args.device)
         # unk tensor
@@ -62,6 +62,8 @@ class Model(nn.Module):
         pos_tag = inputs[1][0]
         columns_split, columns_split_len = inputs[2]
         columns_split_marker, columns_split_marker_len = inputs[3]  # _, (batch_size)
+        cells_split, cells_split_len = inputs[4]
+        cells_split_marker, cells_split_marker_len = inputs[5]  # _, (batch_size)
         batch_size = tokenize.size(0)
         # encode token
         token_embed = self.token_embedding(tokenize)
@@ -76,20 +78,18 @@ class Model(nn.Module):
         logger.debug('token_out')
         logger.debug(token_out)
         # encode table
-        table_embed = self.token_embedding(columns_split).transpose(0, 1).contiguous()  # (column_token_max_len, batch_size, word_dim)
-        # table_out, table_hidden = runBiRNN(self.token_lstm, table_embed, columns_split_len,
-        #                                    total_length=self.args.column_token_max_len)
-        table_out, table_hidden = self.table_encoder(self.token_lstm, table_embed, columns_split_len, columns_split_marker, hidden=token_hidden)  # (columns_split_marker_max_len - 1, batch_size, 2*hidden_size)
-        logger.debug('table_out')
-        logger.debug(table_out)
-        memory_bank = torch.cat([token_out, table_out], dim=0).transpose(0, 1).contiguous()
+        col_embed = self.token_embedding(columns_split).transpose(0, 1).contiguous()  # (columns_token_max_len, batch_size, word_dim)
+        col_out, col_hidden = self.table_encoder(self.token_lstm, col_embed, columns_split_len, columns_split_marker, hidden=token_hidden)  # (columns_split_marker_max_len - 1, batch_size, 2*hidden_size)
+        cell_embed = self.token_embedding(cells_split).transpose(0, 1).contiguous()  # (columns_token_max_len, batch_size, word_dim)
+        table_out, table_hidden = self.table_encoder(self.token_lstm, cell_embed, cells_split_len, cells_split_marker, hidden=col_hidden)  # (columns_split_marker_max_len - 1, batch_size, 2*hidden_size)
+        memory_bank = torch.cat([token_out, col_out, table_out], dim=0).transpose(0, 1).contiguous()
         unk_tensor = self.unk_tensor.unsqueeze(0).expand(batch_size, 1, -1)
         # memory_bank = torch.cat([memory_bank, unk_tensor], dim=1)
         logger.debug('memory_bank')
         logging.debug(memory_bank)
         # attn_h, align_score = self.ques_table_attn(table_out.transpose(0, 1).contiguous(), token_out.transpose(0, 1).contiguous(), columns_split_marker_len - 1,
         #                                            src_max_len=self.args.columns_split_marker_max_len - 1)
-        pointer_align_scores, hidden = self.pointer_net_decoder(memory_bank, token_out, hidden=table_hidden, tgt_lengths=tokenize_len, tgt_max_len=self.args.tokenize_max_len,
+        pointer_align_scores, hidden = self.pointer_net_decoder(memory_bank, token_embed, hidden=table_hidden, tgt_lengths=tokenize_len, tgt_max_len=self.args.tokenize_max_len,
                                                                src_lengths=None,
                                                                src_max_len=None)  # (batch_size, tokenize_max_len, tokenize_max_len + columns_split_marker_max_len), _
         logger.debug('pointer_align_scores')

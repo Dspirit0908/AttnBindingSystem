@@ -29,7 +29,7 @@ class TableRNNEncoder(nn.Module):
             :param tbl_len: length of token list (num_table_header, batch)
             :param tbl_split: table header boundary list
         """
-        tbl_context, hidden = runBiRNN(encoder, tbl, tbl_len, hidden=hidden, total_length=self.args.column_token_max_len)
+        tbl_context, hidden = runBiRNN(encoder, tbl, tbl_len, hidden=hidden, total_length=self.args.columns_token_max_len)
         logger.debug('tbl_context')
         logger.debug(tbl_context.size())
         logger.debug(tbl_context)

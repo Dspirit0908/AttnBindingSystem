@@ -11,10 +11,10 @@ class PointerNetRNNDecoder(nn.Module):
     """
     Pointer network RNN Decoder, process all the output together
     """
-    def __init__(self, args):
+    def __init__(self, args, input_dim):
         super(PointerNetRNNDecoder, self).__init__()
         self.args = args
-        self.lstm = nn.LSTM(2*self.args.hidden_size, self.args.hidden_size, bidirectional=True, batch_first=False,
+        self.lstm = nn.LSTM(input_dim, self.args.hidden_size, bidirectional=True, batch_first=False,
                                   num_layers=self.args.num_layers, dropout=self.args.dropout_p)
         self.attention = Attention('general', dim=2 * self.args.hidden_size, args=self.args)
         

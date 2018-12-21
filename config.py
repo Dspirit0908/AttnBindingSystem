@@ -16,14 +16,14 @@ class Args(object):
         self.weight_decay = 0.001
         self.epochs = 100
         self.batch_size = 256
-        self.log_trian_interval = 50
-        self.log_test_interval = 10
+        self.log_trian_interval = 10
+        self.log_test_interval = 2
         self.dropout_p = 0.1
         self.load_w2v = False
         self.shuffle = True
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.cuda = True if str(self.device) == 'cuda' else False
-        self.word_dim = 300
+        self.word_dim = 100
         self.hidden_size = 100
         self.num_layers = 1
         self.teacher_forcing_ratio = 1.0
