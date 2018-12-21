@@ -14,8 +14,8 @@ from utils import build_all_vocab, set_seed, load_word_embedding
 
 def main():
     # set environ, args, seed, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-    torch.cuda.set_device(3)
+    os.environ["CUDA_VISIBLE_DEVICES"] = 0
+    torch.cuda.set_device(0)
     args = Args()
     set_seed(args.seed)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

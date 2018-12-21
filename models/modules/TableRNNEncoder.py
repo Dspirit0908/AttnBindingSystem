@@ -22,14 +22,14 @@ class TableRNNEncoder(nn.Module):
                 nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
                 nn.Tanh())
 
-    def forward(self, encoder, tbl, tbl_len, tbl_split, hidden):
+    def forward(self, encoder, tbl, tbl_len, tbl_split, hidden, total_length):
         """
         Encode table headers.
             :param tbl: header token list
             :param tbl_len: length of token list (num_table_header, batch)
             :param tbl_split: table header boundary list
         """
-        tbl_context, hidden = runBiRNN(encoder, tbl, tbl_len, hidden=hidden, total_length=self.args.columns_token_max_len)
+        tbl_context, hidden = runBiRNN(encoder, tbl, tbl_len, hidden=hidden, total_length=total_length)
         logger.debug('tbl_context')
         logger.debug(tbl_context.size())
         logger.debug(tbl_context)

@@ -79,9 +79,9 @@ class Model(nn.Module):
         logger.debug(token_out)
         # encode table
         col_embed = self.token_embedding(columns_split).transpose(0, 1).contiguous()  # (columns_token_max_len, batch_size, word_dim)
-        col_out, col_hidden = self.table_encoder(self.token_lstm, col_embed, columns_split_len, columns_split_marker, hidden=token_hidden)  # (columns_split_marker_max_len - 1, batch_size, 2*hidden_size)
+        col_out, col_hidden = self.table_encoder(self.token_lstm, col_embed, columns_split_len, columns_split_marker, hidden=token_hidden, total_length=self.args.columns_token_max_len)  # (columns_split_marker_max_len - 1, batch_size, 2*hidden_size)
         cell_embed = self.token_embedding(cells_split).transpose(0, 1).contiguous()  # (columns_token_max_len, batch_size, word_dim)
-        table_out, table_hidden = self.table_encoder(self.token_lstm, cell_embed, cells_split_len, cells_split_marker, hidden=col_hidden)  # (columns_split_marker_max_len - 1, batch_size, 2*hidden_size)
+        table_out, table_hidden = self.table_encoder(self.token_lstm, cell_embed, cells_split_len, cells_split_marker, hidden=col_hidden, total_length=self.args.cells_token_max_len)  # (columns_split_marker_max_len - 1, batch_size, 2*hidden_size)
         memory_bank = torch.cat([token_out, col_out, table_out], dim=0).transpose(0, 1).contiguous()
         unk_tensor = self.unk_tensor.unsqueeze(0).expand(batch_size, 1, -1)
         # memory_bank = torch.cat([memory_bank, unk_tensor], dim=1)
