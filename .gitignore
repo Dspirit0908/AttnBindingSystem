@@ -113,3 +113,6 @@ venv.bak/
 
 # Pycharm
 *.idea/
+
+# res
+res/

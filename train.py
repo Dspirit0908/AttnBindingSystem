@@ -12,6 +12,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from torch import nn
 from utils import count_of_diff
+from models.policy_grad import Policy
 from sklearn.metrics import f1_score, classification_report, confusion_matrix, accuracy_score
 from sklearn.utils.multiclass import unique_labels
 
@@ -33,7 +34,7 @@ def train(train_loader, dev_loader, args, model):
     CE = torch.nn.CrossEntropyLoss(ignore_index=-100)
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
-            inputs, label = data
+            inputs, label, _ = data
             label = Variable(label).to(args.device)
             for i in range(len(inputs)):
                 inputs[i][0] = Variable(inputs[i][0]).to(args.device)
@@ -56,16 +57,17 @@ def train(train_loader, dev_loader, args, model):
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
         if epoch % args.log_test_interval == 0:
             correct, total = eval(dev_loader, args, model, epoch=epoch, s_time=s_time)
+            if correct > best_correct and correct > 1500:
+                torch.save(model, './res/' + str(correct) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time())))
             best_correct = max(best_correct, correct)
     print('best correct: {}'.format(best_correct))
 
 
 def eval(data_loader, args, model, epoch=None, s_time=time.time()):
-    print('eval')
     total_pred, total_true = np.array([]), np.array([])
     correct, total = 0, 0
     for data in data_loader:
-        inputs, label = data
+        inputs, label, _ = data
         label = Variable(label).to(args.device)
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
@@ -95,3 +97,64 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
     print(classification_report(total_true, total_pred))
     print(confusion_matrix(total_true, total_pred))
     return correct, total
+
+
+def train_rl(train_loader, dev_loader, args, model):
+    s_time = time.time()
+    print('start train_rl... {}'.format(time.strftime('%H:%M:%S', time.localtime(time.time()))))
+    if args.cuda:
+        model.cuda()
+    # model.apply(init_parameters)
+    # large_lr_layers = list(map(id, model.fc.parameters()))
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    model.train()
+
+    best_correct = 0
+    policy = Policy(args=args)
+    # test for baseline model
+    eval_rl(dev_loader, args, model, 0)
+    for epoch in range(1, args.epochs + 1):
+        for data in train_loader:
+            inputs, label, sql_label = data
+            label = Variable(label).to(args.device)
+            for i in range(len(inputs)):
+                inputs[i][0] = Variable(inputs[i][0]).to(args.device)
+            
+            model.zero_grad()
+            optimizer.zero_grad()
+            # inference
+            logit = model(inputs)
+            tokenize_len = inputs[0][1]
+            logprob, reward = policy.select_action(logit, tokenize_len, sql_label)
+            loss = torch.sum(-logprob.mul(reward)) / logit.size(0)
+            loss.backward()
+            optimizer.step()
+            # sys.exit()
+        # logger.info('reward_epoch')
+        # logger.info(rewards_epoch)
+        if epoch % args.log_trian_interval == 0:
+            eval_rl(train_loader, args, model, epoch)
+        if epoch % args.log_test_interval == 0:
+            eval_rl(dev_loader, args, model, epoch)
+    print('best correct: {}'.format(best_correct))
+
+
+def eval_rl(data_loader, args, model, epoch):
+    policy = Policy(args=args)
+    rewards_epoch, step = 0, 0
+    for data in data_loader:
+        inputs, label, sql_label = data
+        label = Variable(label).to(args.device)
+        for i in range(len(inputs)):
+            inputs[i][0] = Variable(inputs[i][0]).to(args.device)
+
+        # inference
+        logit = model(inputs)
+        tokenize_len = inputs[0][1]
+        logprob, reward = policy.select_action(logit, tokenize_len, sql_label)
+        # logger.info('reward')
+        # logger.info(reward.mean())
+        rewards_epoch += reward.mean()
+        step += 1
+    logger.info('reward_epoch {}'.format(str(epoch)))
+    logger.info(rewards_epoch / step)

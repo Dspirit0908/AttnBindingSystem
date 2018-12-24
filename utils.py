@@ -83,6 +83,7 @@ def preprocess(mode):
                             label_split = label.split('_')
                             if label_split[0] in UNK_TERM:
                                 info['label'].append('UNK')
+                            # todo: NumberRangeTerm need to handle in other way
                             elif label_split[0] == 'ValueTerm' or label_split[0] == 'NumberRangeTerm':
                                 value = '_'.join(label_split[1:-2]).lower()
                                 info['label'].append('Value_' + str(cells.index(value)))
@@ -106,6 +107,7 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
     pos_tag_list = []
     table_id_list = []
     label_list = []
+    sql_label_list = []
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
@@ -116,6 +118,7 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
             pos_tag = info['pos_tag']
             table_id = info['table_id']
             label = info['label']
+            sql_label = info['sql']['sel']
             # if only_label, pass when the label is []
             if only_label:
                 if len(label) == 0:
@@ -129,12 +132,13 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
                 pos_tag_list.append(pos_tag)
                 table_id_list.append(table_id)
                 label_list.append(label)
+                sql_label_list.append(sql_label)
     if only_tokenize:
         return tokenize_list
     else:
         # check
-        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list) == len(label_list)
-        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list
+        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list) == len(label_list) == len(sql_label_list)
+        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list, sql_label_list
 
 
 def load_tables(path, vocab=False, lower=True, load_cell=True):
@@ -175,10 +179,7 @@ def load_tables(path, vocab=False, lower=True, load_cell=True):
                 tables_info[key]['columns_split'], tables_info[key]['columns_split_marker'] = _handle(info['header'], lower)
                 if load_cell:
                     tables_info[key]['cells_split'], tables_info[key]['cells_split_marker'] = _handle(cells, lower)
-    if vocab:
-        return vocab_list
-    else:
-        return tables_info
+    return vocab_list if vocab else tables_info
 
 
 def load_word_embedding(word_dim, vocab, max_vocab_size=None):
@@ -241,7 +242,7 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_fre
     return word2index, index2word
 
 
-def build_all_vocab(min_word_freq=1):
+def build_all_vocab(init_vocab=None, min_word_freq=1):
     # need to know all the words to filter the pretrained word embeddings
     load_only_tokenize = functools.partial(load_data, only_tokenize=True)
     load_tables_vocab = functools.partial(load_tables, vocab=True)
@@ -252,7 +253,7 @@ def build_all_vocab(min_word_freq=1):
         all_tokenize.extend(tokenize)
         vocab = load_tables_vocab(get_wikisql_tables_path(mode))
         all_tokenize.extend(vocab)
-    word2index, index2word = build_vocab(all_tokenize, min_word_freq=min_word_freq)
+    word2index, index2word = build_vocab(all_tokenize, init_vocab=init_vocab, min_word_freq=min_word_freq)
     return word2index, index2word
 
 
