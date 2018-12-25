@@ -25,11 +25,11 @@ def train(train_loader, dev_loader, args, model):
     print('start train... {}'.format(time.strftime('%H:%M:%S',time.localtime(time.time()))))
     if args.cuda:
         model.cuda()
+    # todo: init_parameters and adjust learning rate
     # model.apply(init_parameters)
     # large_lr_layers = list(map(id, model.fc.parameters()))
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()
-
     best_correct = 0
     CE = torch.nn.CrossEntropyLoss(ignore_index=-100)
     for epoch in range(1, args.epochs + 1):
@@ -38,9 +38,10 @@ def train(train_loader, dev_loader, args, model):
             label = Variable(label).to(args.device)
             for i in range(len(inputs)):
                 inputs[i][0] = Variable(inputs[i][0]).to(args.device)
-
+            # zero_grad
             model.zero_grad()
             optimizer.zero_grad()
+            # inference
             logit = model(inputs)
             loss = CE(logit.permute(0, 2, 1).contiguous(), label)
             # loss = 0
@@ -52,7 +53,6 @@ def train(train_loader, dev_loader, args, model):
             loss.backward()
             optimizer.step()
             # sys.exit()
-        
         if epoch % args.log_trian_interval == 0:
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
         if epoch % args.log_test_interval == 0:
@@ -71,9 +71,8 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
         label = Variable(label).to(args.device)
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
-
+        # inference
         logit = model(inputs)
-        tokenize_len = inputs[0][1]
         logit = torch.max(logit, 2)[1]
         pred = logit.data.cpu().numpy()
         true = label.data.cpu().numpy()
@@ -90,7 +89,6 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
             total_true, total_pred = np.append(total_true, true_truncate), np.append(total_pred, pred_truncate)
     if epoch is not None:
         print('epoch {} cost_time {}'.format(epoch, (time.time() - s_time) / 60))
-    
     m_f1_score = f1_score(total_true, total_pred, average='micro')
     print('correct: {}, total: {}'.format(correct, total))
     print('micro f1: {}'.format(m_f1_score))
@@ -100,7 +98,6 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
 
 
 def train_rl(train_loader, dev_loader, args, model):
-    s_time = time.time()
     print('start train_rl... {}'.format(time.strftime('%H:%M:%S', time.localtime(time.time()))))
     if args.cuda:
         model.cuda()
@@ -108,30 +105,27 @@ def train_rl(train_loader, dev_loader, args, model):
     # large_lr_layers = list(map(id, model.fc.parameters()))
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()
-
     best_correct = 0
     policy = Policy(args=args)
     # test for baseline model
     eval_rl(dev_loader, args, model, 0)
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
+            # unpack data
             inputs, label, sql_label = data
-            label = Variable(label).to(args.device)
             for i in range(len(inputs)):
                 inputs[i][0] = Variable(inputs[i][0]).to(args.device)
-            
+            # zero_grad
             model.zero_grad()
             optimizer.zero_grad()
             # inference
             logit = model(inputs)
             tokenize_len = inputs[0][1]
             logprob, reward = policy.select_action(logit, tokenize_len, sql_label)
-            loss = torch.sum(-logprob.mul(reward)) / logit.size(0)
+            loss = torch.sum(-logprob.mul(reward))
+            # loss /= logit.size(0)
             loss.backward()
             optimizer.step()
-            # sys.exit()
-        # logger.info('reward_epoch')
-        # logger.info(rewards_epoch)
         if epoch % args.log_trian_interval == 0:
             eval_rl(train_loader, args, model, epoch)
         if epoch % args.log_test_interval == 0:
@@ -144,16 +138,12 @@ def eval_rl(data_loader, args, model, epoch):
     rewards_epoch, step = 0, 0
     for data in data_loader:
         inputs, label, sql_label = data
-        label = Variable(label).to(args.device)
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
-
         # inference
         logit = model(inputs)
         tokenize_len = inputs[0][1]
         logprob, reward = policy.select_action(logit, tokenize_len, sql_label)
-        # logger.info('reward')
-        # logger.info(reward.mean())
         rewards_epoch += reward.mean()
         step += 1
     logger.info('reward_epoch {}'.format(str(epoch)))

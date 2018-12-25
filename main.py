@@ -21,7 +21,6 @@ def main(mode):
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')
     # build vocab
-    # word2index, index2word = build_all_vocab(init_vocab={'UNK': 0}, min_word_freq=3)
     word2index, index2word = build_all_vocab(init_vocab={'UNK': 0})
     args.vocab, args.vocab_size = word2index, len(word2index)
     # get data_from_train from only_label = False, for same as train baseline
@@ -47,10 +46,10 @@ def main(mode):
     if mode == 'train baseline':
         model = Baseline(args)
         train(train_dataloader, dev_dataloader, args=args, model=model)
-    elif mode == 'RL':
+    elif mode == 'policy gradient':
         model = torch.load('./res/1516')
         train_rl(train_dataloader, dev_dataloader, args=args, model=model)
 
 
 if __name__ == '__main__':
-    main('RL')
+    main('policy gradient')

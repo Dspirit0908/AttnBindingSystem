@@ -14,7 +14,7 @@ class Policy:
         m = Categorical(probs_step)
         action = m.sample()
         return action, m.log_prob(action)
-    
+
     def select_action(self, probs, lengths, sql_labels):
         batch_size = probs.size(0)
         # notice the max_len
