@@ -41,7 +41,7 @@ def train(train_loader, dev_loader, args, model):
             # zero_grad
             model.zero_grad()
             optimizer.zero_grad()
-            # inference
+            # feed forward
             logit = model(inputs)
             loss = CE(logit.permute(0, 2, 1).contiguous(), label)
             # loss = 0
@@ -71,7 +71,7 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
         label = Variable(label).to(args.device)
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
-        # inference
+        # feed forward
         logit = model(inputs)
         logit = torch.max(logit, 2)[1]
         pred = logit.data.cpu().numpy()
@@ -112,16 +112,16 @@ def train_rl(train_loader, dev_loader, args, model):
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
             # unpack data
-            inputs, label, sql_label = data
+            inputs, label, sql_labels = data
             for i in range(len(inputs)):
                 inputs[i][0] = Variable(inputs[i][0]).to(args.device)
             # zero_grad
             model.zero_grad()
             optimizer.zero_grad()
-            # inference
+            # feed forward
             logit = model(inputs)
             tokenize_len = inputs[0][1]
-            logprob, reward = policy.select_action(logit, tokenize_len, sql_label)
+            logprob, reward = policy.select_action(logit, tokenize_len, sql_labels)
             loss = torch.sum(-logprob.mul(reward))
             # loss /= logit.size(0)
             loss.backward()
@@ -135,16 +135,16 @@ def train_rl(train_loader, dev_loader, args, model):
 
 def eval_rl(data_loader, args, model, epoch):
     policy = Policy(args=args)
-    rewards_epoch, step = 0, 0
+    rewards_epoch, total_batch = 0, 0
     for data in data_loader:
-        inputs, label, sql_label = data
+        inputs, label, sql_labels = data
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
-        # inference
+        # feed forward
         logit = model(inputs)
         tokenize_len = inputs[0][1]
-        logprob, reward = policy.select_action(logit, tokenize_len, sql_label)
-        rewards_epoch += reward.mean()
-        step += 1
+        reward = policy.select_max_action(logit, tokenize_len, sql_labels)
+        rewards_epoch += reward.sum()
+        total_batch += reward.size(0)
     logger.info('reward_epoch {}'.format(str(epoch)))
-    logger.info(rewards_epoch / step)
+    logger.info(rewards_epoch / total_batch)

@@ -9,7 +9,7 @@ from train import train, train_rl
 from models.baseline import Baseline
 from dataloader import BindingDataset
 from torch.utils.data import Dataset, DataLoader
-from utils import build_all_vocab, set_seed, load_word_embedding
+from utils import UNK_WORD, build_all_vocab, set_seed, load_word_embedding
 
 
 def main(mode):
@@ -21,7 +21,7 @@ def main(mode):
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')
     # build vocab
-    word2index, index2word = build_all_vocab(init_vocab={'UNK': 0})
+    word2index, index2word = build_all_vocab(init_vocab={UNK_WORD: 0})
     args.vocab, args.vocab_size = word2index, len(word2index)
     # get data_from_train from only_label = False, for same as train baseline
     args.only_label = True
@@ -31,7 +31,7 @@ def main(mode):
                        train_dataset.cells_split_marker_max_len, train_dataset.pos_tag_vocab)
     args.tokenize_max_len, args.columns_token_max_len, args.columns_split_marker_max_len, \
     args.cells_token_max_len, args.cells_split_marker_max_len, args.pos_tag_vocab = data_from_train
-    logger.info(data_from_train)
+    logger.info('data_from_train'), logger.info(data_from_train)
     args.only_label = True if mode == 'train baseline' else False
     # build train_dataloader
     train_dataset = BindingDataset('train', args=args, data_from_train=data_from_train)

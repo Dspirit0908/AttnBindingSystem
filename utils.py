@@ -14,10 +14,10 @@ from nltk.tokenize import WordPunctTokenizer
 from config import wikisql_path, preprocess_path, word_embedding_path
 
 UNK_WORD = '<unk>'
+SPLIT_WORD = '<|>'
 PAD_WORD = '<blank>'
 BOS_WORD = '<s>'
 EOS_WORD = '</s>'
-SPLIT_WORD = '<|>'
 special_token_list = [UNK_WORD, PAD_WORD, BOS_WORD, EOS_WORD, SPLIT_WORD]
 special_token_vocab = dict(list(zip(special_token_list, list(range(len(special_token_list))))))
 
@@ -82,7 +82,7 @@ def preprocess(mode):
                         for index, label in enumerate(the_label_info):
                             label_split = label.split('_')
                             if label_split[0] in UNK_TERM:
-                                info['label'].append('UNK')
+                                info['label'].append(UNK_WORD)
                             # todo: NumberRangeTerm need to handle in other way
                             elif label_split[0] == 'ValueTerm' or label_split[0] == 'NumberRangeTerm':
                                 value = '_'.join(label_split[1:-2]).lower()
@@ -103,42 +103,62 @@ def preprocess(mode):
 
 def load_data(path, only_tokenize=False, only_label=False, lower=True):
     print('loading {}'.format(path))
+    label_list = []
     tokenize_list, tokenize_len_list = [], []
     pos_tag_list = []
     table_id_list = []
-    label_list = []
-    sql_label_list = []
+    # a list, list of list, list of list of list
+    sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = [], [], []
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
+            # get label
+            label = info['label']
+            # if only_label, pass when the label is []. need check only_label at first.
+            if only_label:
+                if len(label) == 0:
+                    continue
+            # get tokenize
             if lower:
                 tokenize = [word.lower() for word in info['tokenize']]
             else:
                 tokenize = info['tokenize']
+            tokenize_list.append(tokenize)
+            # if only_tokenize for build vocab, continue.
+            if only_tokenize:
+                continue
+            # get other infos
             pos_tag = info['pos_tag']
             table_id = info['table_id']
-            label = info['label']
-            sql_label = info['sql']['sel']
-            # if only_label, pass when the label is []
-            if only_label:
-                if len(label) == 0:
-                    continue
+            sel_col = info['sql']['sel']
+            conds_cols, conds_values = [], []
+            conds_values_flag = True
+            for cond in info['sql']['conds']:
+                conds_cols.append(cond[0])
+                value_index = find_value_index(value=str(cond[2]), token_list=tokenize, lower=lower)
+                # todo: handle this situation
+                if value_index is None:
+                    # need drop the data
+                    tokenize_list.pop()
+                    conds_values_flag = False
+                    break
+                else:
+                    conds_values.append(value_index)
             # append
-            tokenize_list.append(tokenize)
-            if only_tokenize:
-                pass
-            else:
+            if conds_values_flag:
+                label_list.append(label)
                 tokenize_len_list.append(len(tokenize))
                 pos_tag_list.append(pos_tag)
                 table_id_list.append(table_id)
-                label_list.append(label)
-                sql_label_list.append(sql_label)
+                sql_sel_col_list.append(sel_col), sql_conds_cols_list.append(conds_cols), sql_conds_values_list.append(conds_values)
     if only_tokenize:
         return tokenize_list
     else:
         # check
-        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list) == len(label_list) == len(sql_label_list)
-        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list, sql_label_list
+        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list)\
+               == len(label_list) == len(sql_sel_col_list) == len(sql_conds_cols_list) == len(sql_conds_values_list)
+        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list,\
+               sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
 
 
 def load_tables(path, vocab=False, lower=True, load_cell=True):
@@ -174,7 +194,8 @@ def load_tables(path, vocab=False, lower=True, load_cell=True):
             
             if vocab:
                 vocab_list.append(_handle(info['header'], lower)[0])
-                vocab_list.append(_handle(cells, lower)[0])
+                if load_cell:
+                    vocab_list.append(_handle(cells, lower)[0])
             else:
                 tables_info[key]['columns_split'], tables_info[key]['columns_split_marker'] = _handle(info['header'], lower)
                 if load_cell:
@@ -220,7 +241,6 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_fre
             if pre_func is not None:
                 word = pre_func(word)
             word_count[word] = word_count.get(word, 0) + 1
-
     # filter rare words
     new_word_count_keys = [key for key in word_count if word_count[key] >= min_word_freq]
     # sort
@@ -236,7 +256,7 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_fre
         num = len(init_vocab)
         for k, v in word2index.items():
             index2word[v] = k
-
+    # get word2index and index2word
     word2index.update(dict(list(zip(new_word_count_keys, list(range(num, num + len(new_word_count_keys)))))))
     index2word.update(dict(list(zip(list(range(num, num + len(new_word_count_keys))), new_word_count_keys))))
     return word2index, index2word
@@ -283,6 +303,23 @@ def pad(m_lists, max_len, pad_token=0):
             s_list = s_list[:max_len]
         idxs_list.append(s_list)
     return idxs_list
+
+
+def find_value_index(value, token_list, lower):
+    """
+    :param value: string
+    :param token_list: token list
+    :param lower: whether the value need to be lower()
+    :return: a list: [start_index, end_index + 1] or None
+    """
+    value_tokenize = WordPunctTokenizer().tokenize(value)
+    if lower:
+        value_tokenize = [v.lower() for v in value_tokenize]
+    value_length = len(value_tokenize)
+    for start_index in range(len(token_list) - value_length + 1):
+        if value_tokenize[:] == token_list[start_index:start_index + value_length]:
+            return [start_index, start_index + value_length]
+    return None
 
 
 def max_len_of_m_lists(m_lists):
@@ -411,7 +448,9 @@ def compare_sql():
 
 
 if __name__ == '__main__':
+    # preprocess all
     mode_list = ['train', 'dev', 'test']
     table_id_set_list = []
     for index, mode in enumerate(mode_list):
         preprocess(mode)
+    pass
