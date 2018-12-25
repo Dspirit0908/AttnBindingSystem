@@ -5,6 +5,7 @@ from torch import nn
 from torch.autograd import Variable
 from utils import runBiRNN
 from models.modules.Attention import Attention
+from models.modules.GlobalAttention import GlobalAttention
 
 
 class PointerNetRNNDecoder(nn.Module):
@@ -16,9 +17,9 @@ class PointerNetRNNDecoder(nn.Module):
         self.args = args
         self.lstm = nn.LSTM(input_dim, self.args.hidden_size, bidirectional=True, batch_first=False,
                                   num_layers=self.args.num_layers, dropout=self.args.dropout_p)
-        self.attention = Attention('general', dim=2 * self.args.hidden_size, args=self.args)
+        self.attention = GlobalAttention(args=self.args, dim=2 * self.args.hidden_size, attn_type="mlp")
         
-    def forward(self, memory_bank, tgt, hidden, src_lengths=None, src_max_len=None, tgt_lengths=None, tgt_max_len=None):
+    def forward(self, tgt, src, hidden, src_lengths=None, src_max_len=None, tgt_lengths=None, tgt_max_len=None):
         def _fix_enc_hidden(h):
             """
             The encoder hidden is  (layers*directions) x batch x dim.
@@ -31,5 +32,5 @@ class PointerNetRNNDecoder(nn.Module):
         rnn_output, hidden = runBiRNN(self.lstm, inputs=tgt, seq_lengths=tgt_lengths, hidden=hidden, total_length=tgt_max_len)
         # Attention
         rnn_output = rnn_output.transpose(0, 1).contiguous()
-        attn_h, align_score = self.attention(memory_bank, rnn_output, src_lengths=src_lengths, src_max_len=src_max_len)
+        attn_h, align_score = self.attention(input=rnn_output, context=src, input_lengths=src_lengths, input_max_len=src_max_len)
         return align_score, hidden

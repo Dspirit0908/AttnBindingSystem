@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-
-from utils import BottleLinear
 from utils import aeq
 
 
@@ -32,9 +30,13 @@ class GlobalAttention(nn.Module):
     $$a_j = softmax(v_a^T \tanh(W_a q + U_a h_j) )$$.
     """
 
-    def __init__(self, dim, is_transform_out=True, attn_type="dot", attn_hidden=0):
+    def __init__(self, args, dim, is_transform_out=True, attn_type="mlp", attn_hidden=0):
+        """
+        :param attn_hidden: whether use self.transform_in for src and tgt
+        """
         super(GlobalAttention, self).__init__()
 
+        self.args = args
         self.dim = dim
         self.attn_type = attn_type
         self.attn_hidden = attn_hidden
@@ -52,9 +54,9 @@ class GlobalAttention(nn.Module):
             # initialization
             # self.linear_in.weight.data.add_(torch.eye(d))
         elif self.attn_type == "mlp":
-            self.linear_context = BottleLinear(dim, dim, bias=False)
+            self.linear_context = nn.Linear(dim, dim, bias=False)
             self.linear_query = nn.Linear(dim, dim, bias=True)
-            self.v = BottleLinear(dim, 1, bias=False)
+            self.v = nn.Linear(dim, 1, bias=False)
         # mlp wants it with bias
         out_bias = self.attn_type == "mlp"
         if is_transform_out:
@@ -64,13 +66,6 @@ class GlobalAttention(nn.Module):
 
         self.sm = nn.Softmax()
         self.tanh = nn.Tanh()
-        self.mask = None
-
-    def applyMask(self, mask):
-        self.mask = mask
-
-    def applyMaskBySeqBatch(self, q):
-        self.applyMask(q.data.eq(table.IO.PAD).t().contiguous().unsqueeze(0))
 
     def score(self, h_t, h_s):
         """
@@ -111,7 +106,7 @@ class GlobalAttention(nn.Module):
 
             return self.v(wquh.view(-1, dim)).view(tgt_batch, tgt_len, src_len)
 
-    def forward(self, input, context):
+    def forward(self, input, context, input_lengths=None, input_max_len=None):
         """
         input (FloatTensor): batch x tgt_len x dim: decoder's rnn's output.
         context (FloatTensor): batch x src_len x dim: src hidden states
@@ -130,58 +125,43 @@ class GlobalAttention(nn.Module):
         aeq(dim, dim_)
         aeq(self.dim, dim)
 
-        if self.mask is not None:
-            beam_, batch_, sourceL_ = self.mask.size()
-            aeq(batch, batch_ * beam_)
-            aeq(sourceL, sourceL_)
-
         # compute attention scores, as in Luong et al.
         align = self.score(input, context)
 
-        if self.mask is not None:
-            mask_ = self.mask.view(batch, 1, sourceL)  # make it broardcastable
-            align.data.masked_fill_(mask_, -float('inf'))
+        if input_lengths is not None:
+            mask = self.sequence_mask(input_lengths, input_max_len)
+            mask = mask.unsqueeze(1).to(self.args.device)
+            # (bz, max_len) -> (bz, 1, max_len), so mask can broadcast
+            align.data.masked_fill_(1 - mask, -float('inf'))
 
         # Softmax to normalize attention weights
-        align_vectors = self.sm(align.view(batch * targetL, sourceL))
-        align_vectors = align_vectors.view(batch, targetL, sourceL)
+        align_vectors = self.sm(align, dim=-1)
 
         # each context vector c_t is the weighted average
         # over all the source hidden states
         c = torch.bmm(align_vectors, context)
-
         # concatenate
-        concat_c = torch.cat([c, input], 2)
+        concat_c = torch.cat([c, input], -1)
+        # linear_out
         if self.linear_out is None:
             attn_h = concat_c
         else:
             attn_h = self.linear_out(concat_c)
             if self.attn_type in ["general", "dot"]:
                 attn_h = self.tanh(attn_h)
-
         if one_step:
             attn_h = attn_h.squeeze(1)
             align_vectors = align_vectors.squeeze(1)
-
-            # Check output sizes
-            batch_, dim_ = attn_h.size()
-            aeq(batch, batch_)
-            # aeq(dim, dim_)
-            batch_, sourceL_ = align_vectors.size()
-            aeq(batch, batch_)
-            aeq(sourceL, sourceL_)
-        else:
-            attn_h = attn_h.transpose(0, 1).contiguous()
-            align_vectors = align_vectors.transpose(0, 1).contiguous()
-
-            # Check output sizes
-            targetL_, batch_, dim_ = attn_h.size()
-            aeq(targetL, targetL_)
-            aeq(batch, batch_)
-            # aeq(dim, dim_)
-            targetL_, batch_, sourceL_ = align_vectors.size()
-            aeq(targetL, targetL_)
-            aeq(batch, batch_)
-            aeq(sourceL, sourceL_)
-
+        # (batch, targetL, dim_), (batch, targetL, sourceL)
         return attn_h, align_vectors
+    
+    def sequence_mask(self, lengths, max_len=None):
+        """
+        Creates a boolean mask from sequence lengths.
+        """
+        batch_size = lengths.numel()
+        max_len = max_len or lengths.max()
+        return (torch.arange(0, max_len)
+            .type_as(lengths)
+            .repeat(batch_size, 1)
+            .lt(lengths.unsqueeze(1)))

@@ -105,7 +105,6 @@ def train_rl(train_loader, dev_loader, args, model):
     # large_lr_layers = list(map(id, model.fc.parameters()))
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()
-    best_correct = 0
     policy = Policy(args=args)
     # test for baseline model
     eval_rl(dev_loader, args, model, 0)
@@ -130,7 +129,6 @@ def train_rl(train_loader, dev_loader, args, model):
             eval_rl(train_loader, args, model, epoch)
         if epoch % args.log_test_interval == 0:
             eval_rl(dev_loader, args, model, epoch)
-    print('best correct: {}'.format(best_correct))
 
 
 def eval_rl(data_loader, args, model, epoch):

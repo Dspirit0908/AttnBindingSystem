@@ -91,7 +91,7 @@ class Baseline(nn.Module):
         logging.debug(memory_bank)
         # attn_h, align_score = self.ques_table_attn(table_out.transpose(0, 1).contiguous(), token_out.transpose(0, 1).contiguous(), columns_split_marker_len - 1,
         #                                            src_max_len=self.args.columns_split_marker_max_len - 1)
-        pointer_align_scores, hidden = self.pointer_net_decoder(memory_bank, token_embed, hidden=col_hidden, tgt_lengths=tokenize_len, tgt_max_len=self.args.tokenize_max_len,
+        pointer_align_scores, hidden = self.pointer_net_decoder(tgt=token_embed, src=memory_bank, hidden=col_hidden, tgt_lengths=tokenize_len, tgt_max_len=self.args.tokenize_max_len,
                                                                src_lengths=None,
                                                                src_max_len=None)  # (batch_size, tokenize_max_len, tokenize_max_len + columns_split_marker_max_len), _
         logger.debug('pointer_align_scores')
@@ -163,4 +163,6 @@ class Baseline(nn.Module):
         # logger.debug('pointer_align_scores.transpose(0, 1)')
         # logger.debug(pointer_align_scores.transpose(0, 1).contiguous().size())
         # logger.debug(pointer_align_scores.transpose(0, 1).contiguous())
+
+        # (batch_size, tgt_len, src_len)
         return pointer_align_scores
