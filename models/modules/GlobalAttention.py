@@ -64,7 +64,6 @@ class GlobalAttention(nn.Module):
         else:
             self.linear_out = None
 
-        self.sm = nn.Softmax()
         self.tanh = nn.Tanh()
 
     def score(self, h_t, h_s):
@@ -135,7 +134,7 @@ class GlobalAttention(nn.Module):
             align.data.masked_fill_(1 - mask, -float('inf'))
 
         # Softmax to normalize attention weights
-        align_vectors = self.sm(align, dim=-1)
+        align_vectors = torch.softmax(align, dim=-1)
 
         # each context vector c_t is the weighted average
         # over all the source hidden states

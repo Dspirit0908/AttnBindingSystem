@@ -31,7 +31,7 @@ def train(train_loader, dev_loader, args, model):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()
     best_correct = 0
-    CE = torch.nn.CrossEntropyLoss(ignore_index=-100)
+    criterion = torch.nn.CrossEntropyLoss(ignore_index=-100)
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
             inputs, label, _ = data
@@ -43,13 +43,10 @@ def train(train_loader, dev_loader, args, model):
             optimizer.zero_grad()
             # feed forward
             logit = model(inputs)
-            loss = CE(logit.permute(0, 2, 1).contiguous(), label)
-            # loss = 0
-            # for ti in range(logit.size()[1]):
-            #     loss += CE(logit[:, ti], label[:, ti])
-            # loss /= logit.size()[0]
-            logger.debug('loss')
-            logger.debug(loss)
+            # loss = CE(logit.permute(0, 2, 1).contiguous(), label)
+            loss = 0
+            for ti in range(logit.size()[1]):
+                loss += criterion(logit[:, ti], label[:, ti])
             loss.backward()
             optimizer.step()
             # sys.exit()

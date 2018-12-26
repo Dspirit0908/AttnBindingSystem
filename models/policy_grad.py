@@ -26,7 +26,7 @@ class Policy:
         actions.data.masked_fill_(1 - mask, -100)
         log_probs.data.masked_fill_(1 - mask, 0.0)
         # compute rewards
-        rewards = self.compute_rewards(actions, sql_labels)
+        rewards = self.compute_rewards(actions, sql_labels, mode='rewards')
         return torch.sum(log_probs, dim=1), rewards
 
     def select_action_step(self, probs_step):

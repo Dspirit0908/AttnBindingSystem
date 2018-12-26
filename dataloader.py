@@ -47,22 +47,24 @@ class BindingDataset(Dataset):
         else:
             self.tokenize_max_len, self.columns_token_max_len, self.columns_split_marker_max_len, self.cells_token_max_len, self.cells_split_marker_max_len, self.pos_tag_vocab = data_from_train
         # get labels
-        pointer_label_list = []
+        pointer_label_list, gate_label_list = [], []
         for label in label_list:
-            pointer_label = []
+            pointer_label, gate_label = [], []
             for index, single_label in enumerate(label):
                 if single_label == UNK_WORD:
-                    pointer_label.append(index)
-                    # pointer_label.append(-100)
+                    # pointer_label.append(index)
+                    pointer_label.append(-100)
+                    gate_label.append(0)
                 else:
+                    gate_label.append(1)
                     single_label_split = single_label.split('_')
                     if single_label_split[0] == 'Value':
-                        pointer_label.append(self.tokenize_max_len + index)
+                        pointer_label.append(index)
                         # pointer_label.append(index)
                     elif single_label_split[0] == 'Column':
-                        pointer_label.append(2 * self.tokenize_max_len + int(single_label_split[1]))
+                        pointer_label.append(self.tokenize_max_len + int(single_label_split[1]))
                         # pointer_label.append(index)
-            pointer_label_list.append(pointer_label)
+            pointer_label_list.append(pointer_label), gate_label_list.append(gate_label)
         
         # change2tensor
         self.tokenize_tensor = torch.LongTensor(pad(change2idx(tokenize_list, vocab=self.args.vocab, name='tokenize_'+mode), max_len=self.tokenize_max_len)).to(device)
@@ -78,6 +80,7 @@ class BindingDataset(Dataset):
             self.cells_split_marker_tensor = torch.LongTensor(pad(cells_split_marker_list, max_len=self.cells_split_marker_max_len, pad_token=self.cells_token_max_len - 1)).to(device)
             self.cells_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_split_marker_max_len), cells_split_marker_len_list))).to(device)
         self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=-100)).to(device)
+        self.gate_label_tensor = torch.LongTensor(pad(gate_label_list, max_len=self.tokenize_max_len, pad_token=-100)).to(device)
         # handle sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
         self.sql_sel_col_list = torch.LongTensor(sql_sel_col_list)
         assert max_len_of_m_lists(sql_conds_cols_list) == max_len_of_m_lists(sql_conds_values_list)
@@ -93,6 +96,7 @@ class BindingDataset(Dataset):
                         [self.columns_split_marker_tensor[index], self.columns_split_marker_len_tensor[index]],
                         [self.cells_split_tensor[index], self.cells_split_len_tensor[index]],
                         [self.cells_split_marker_tensor[index], self.cells_split_marker_len_tensor[index]],
+                        [self.gate_label_tensor[index], ],
                     ), self.pointer_label_tensor[index],\
                    (self.sql_sel_col_list[index], self.sql_conds_cols_list[index], self.sql_conds_values_list[index])
         else:
@@ -101,6 +105,7 @@ class BindingDataset(Dataset):
                        [self.pos_tag_tensor[index], ],
                        [self.columns_split_tensor[index], self.columns_split_len_tensor[index]],
                        [self.columns_split_marker_tensor[index], self.columns_split_marker_len_tensor[index]],
+                       [self.gate_label_tensor[index], ],
                    ), self.pointer_label_tensor[index],\
                    (self.sql_sel_col_list[index], self.sql_conds_cols_list[index], self.sql_conds_values_list[index])
 

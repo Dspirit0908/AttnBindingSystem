@@ -28,7 +28,7 @@ class Args(object):
         self.word_dim = 100
         self.hidden_size = 100
         self.num_layers = 1
-        self.teacher_forcing_ratio = 1.0
+        self.teacher_forcing_ratio = 0.5
         self.embed_matrix = None
 
 

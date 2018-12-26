@@ -1,5 +1,6 @@
 # coding: utf-8
 
+import time
 import json
 import nltk
 import torch
@@ -11,6 +12,7 @@ from gensim.models import KeyedVectors
 from functools import reduce
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import WordPunctTokenizer
+from stanza.nlp.corenlp import CoreNLPClient
 from config import wikisql_path, preprocess_path, word_embedding_path
 
 UNK_WORD = '<unk>'
@@ -58,12 +60,23 @@ def preprocess(mode):
     data_path, out_path = get_wikisql_path(mode), get_preprocess_path(mode)
     with open(data_path) as f, open(out_path, 'w') as out_f:
         UNK_TERM = {'CoreTerm', 'UnknownTerm', 'AdjectiveTerm', 'VisualTerm'}
-        for line in f:
+        for line_index, line in enumerate(f):
             info = json.loads(line.strip())
-            info['tokenize'] = WordPunctTokenizer().tokenize(info['question'])
-            info['lemmatize'] = [WordNetLemmatizer().lemmatize(word) for word in info['tokenize']]
-            info['pos_tag'] = [x[1] for x in nltk.pos_tag(info['tokenize'])]
-
+            # sentence split, tokenize, pos
+            tokenize, origin, pos_tag = [], [], []
+            client = CoreNLPClient(server='http://localhost:9000', default_annotators=['ssplit', 'tokenize', 'pos'])
+            for s in client.annotate(info['question']):
+                for t in s:
+                    tokenize.append(t.word), origin.append(t.originalText), pos_tag.append(t.pos)
+            info['tokenize'], info['original'], info['pos_tag'] = tokenize, origin, pos_tag
+            # get cells
+            cells = set()
+            for s_list in table_info[info['table_id']]['rows']:
+                for word in s_list:
+                    cells.add(str(word))
+            cells = [word.lower() for word in cells if word.lower() in info['question'].lower()]
+            info['cells'] = cells
+            # try get label
             info['label'] = []
             if info['question'] in label_info:
                 the_label_info = label_info[info['question']]['Idx2label']
@@ -73,20 +86,25 @@ def preprocess(mode):
                 # need check word tokenize
                 if len(info['tokenize']) == len(the_label_info):
                     try:
-                        # get cells
-                        cells = set()
-                        for s_list in table_info[info['table_id']]['rows']:
-                            for word in s_list:
-                                cells.add(str(word))
-                        cells = [word.lower() for word in list(cells)]
                         for index, label in enumerate(the_label_info):
                             label_split = label.split('_')
                             if label_split[0] in UNK_TERM:
                                 info['label'].append(UNK_WORD)
                             # todo: NumberRangeTerm need to handle in other way
-                            elif label_split[0] == 'ValueTerm' or label_split[0] == 'NumberRangeTerm':
+                            elif label_split[0] == 'ValueTerm':
                                 value = '_'.join(label_split[1:-2]).lower()
-                                info['label'].append('Value_' + str(cells.index(value)))
+                                info['label'].append('Value_' + str(info['cells'].index(value)))
+                            elif label_split[0] == 'NumberRangeTerm':
+                                try:
+                                    value = '_'.join(label_split[1:-2]).lower()
+                                    info['label'].append('Value_' + str(info['cells'].index(value)))
+                                except:
+                                    value = '_'.join(label_split[1:-2]).lower()
+                                    if 'than' in value:
+                                        value = value.split(' than ')[1]
+                                        if value.endswith('.0'):
+                                            value = value[:-2]
+                                        info['label'].append('Value_' + str(info['cells'].index(value)))
                             elif label_split[0] == 'ColumnTerm':
                                 column = '_'.join(label_split[1:-2])
                                 info['label'].append('Column_' + str(table_info[info['table_id']]['header'].index(column)))
@@ -97,7 +115,7 @@ def preprocess(mode):
                         print(e)
                         print(info['question'])
                         info['label'] = []
-            assert len(info['tokenize']) == len(info['lemmatize']) == len(info['pos_tag'])
+            assert len(info['tokenize']) == len(info['original']) == len(info['pos_tag'])
             out_f.write(json.dumps(info) + '\n')
 
 
