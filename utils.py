@@ -1,17 +1,14 @@
 # coding: utf-8
 
-import time
 import json
-import nltk
+import copy
 import torch
 import random
 import functools
 import numpy as np
 from torch import nn
-from gensim.models import KeyedVectors
 from functools import reduce
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import WordPunctTokenizer
+from gensim.models import KeyedVectors
 from stanza.nlp.corenlp import CoreNLPClient
 from config import wikisql_path, preprocess_path, word_embedding_path
 
@@ -63,10 +60,12 @@ def get_annotate(sentence, lower=True):
 
 
 def get_ngram(s_list):
-    ngram = set()
+    ngram = {}
     for length in range(1, len(s_list) + 1):
         for i in range(len(s_list) - length + 1):
-            ngram.add(''.join(s_list[i:i + length]).lower())
+            key = ''.join(s_list[i:i + length]).lower()
+            value = [i, i + length]
+            ngram[key] = value
     return ngram
 
 
@@ -117,6 +116,10 @@ def preprocess(mode, lower=True):
             tokenize_ngram = get_ngram(info['original'])
             # must to lower() for match value in cells and question
             info['cells'] = [cell.lower() for cell in cells if cell.lower().replace(' ', '') in tokenize_ngram]
+            # change conds_values to index_list
+            info['sql_index'] = copy.deepcopy(info['sql'])
+            for cond in info['sql_index']['conds']:
+                cond[2] = tokenize_ngram[str(cond[2]).lower().replace(' ', '')]
             # try get label
             info['label'] = []
             if info['question'] in label_info:
@@ -187,29 +190,19 @@ def load_data(path, vocab=False, only_label=False):
             tokenize = info['tokenize']
             # get conds
             conds_cols, conds_values = [], []
-            conds_values_flag = True
-            for cond in info['sql']['conds']:
+            for cond in info['sql_index']['conds']:
                 conds_cols.append(cond[0])
-                value_list = get_annotate(str(cond[2]), lower=True)[0]
-                value_index = find_value_index(value_list, token_list=tokenize)
-                # todo: handle this situation
-                if value_index is None:
-                    conds_values_flag = False
-                    print(value_list[0]), print(tokenize)
-                    break
-                else:
-                    conds_values.append(value_index)
+                conds_values.append(cond[2])
             # append
-            if conds_values_flag:
-                tokenize_list.append(tokenize), tokenize_len_list.append(len(tokenize))
-                pos_tag_list.append(info['pos_tag'])
-                table_id_list.append(info['table_id'])
-                columns_split_list.append(info['columns_split']), columns_split_len_list.append(info['columns_split_len'])
-                columns_split_marker_list.append(info['columns_split_marker']), columns_split_marker_len_list.append(info['columns_split_marker_len'])
-                cells_split_list.append(info['cells_split']), cells_split_len_list.append(info['cells_split_len'])
-                cells_split_marker_list.append(info['cells_split_marker']), cells_split_marker_len_list.append(info['cells_split_marker_len'])
-                label_list.append(label)
-                sql_sel_col_list.append(info['sql']['sel']), sql_conds_cols_list.append(conds_cols), sql_conds_values_list.append(conds_values)
+            tokenize_list.append(tokenize), tokenize_len_list.append(len(tokenize))
+            pos_tag_list.append(info['pos_tag'])
+            table_id_list.append(info['table_id'])
+            columns_split_list.append(info['columns_split']), columns_split_len_list.append(info['columns_split_len'])
+            columns_split_marker_list.append(info['columns_split_marker']), columns_split_marker_len_list.append(info['columns_split_marker_len'])
+            cells_split_list.append(info['cells_split']), cells_split_len_list.append(info['cells_split_len'])
+            cells_split_marker_list.append(info['cells_split_marker']), cells_split_marker_len_list.append(info['cells_split_marker_len'])
+            label_list.append(label)
+            sql_sel_col_list.append(info['sql']['sel']), sql_conds_cols_list.append(conds_cols), sql_conds_values_list.append(conds_values)
     if vocab:
         return tokenize_list, columns_split_list
     else:
