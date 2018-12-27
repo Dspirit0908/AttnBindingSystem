@@ -29,8 +29,8 @@ class PointerNetRNNDecoder(nn.Module):
             return h
         
         # RNN
-        # rnn_output, hidden = runBiRNN(self.lstm, inputs=tgt, seq_lengths=tgt_lengths, hidden=hidden, total_length=tgt_max_len)
-        rnn_output, hidden = self.lstm(tgt, hidden)
+        # rnn_output, hidden = self.lstm(tgt, hidden)
+        rnn_output, hidden = runBiRNN(self.lstm, inputs=tgt, seq_lengths=tgt_lengths, hidden=hidden, total_length=tgt_max_len)
         # Attention
         rnn_output = rnn_output.transpose(0, 1).contiguous()
         # _, (batch_size, tgt, src)

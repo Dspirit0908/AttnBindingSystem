@@ -34,7 +34,7 @@ def train(train_loader, dev_loader, args, model):
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-100)
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
-            inputs, label, _ = data
+            inputs, (label, _), _ = data
             label = Variable(label).to(args.device)
             for i in range(len(inputs)):
                 inputs[i][0] = Variable(inputs[i][0]).to(args.device)
@@ -64,7 +64,7 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
     total_pred, total_true = np.array([]), np.array([])
     correct, total = 0, 0
     for data in data_loader:
-        inputs, label, _ = data
+        inputs, (label, _), _ = data
         label = Variable(label).to(args.device)
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
@@ -108,7 +108,7 @@ def train_rl(train_loader, dev_loader, args, model):
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
             # unpack data
-            inputs, label, sql_labels = data
+            inputs, (label, _), sql_labels = data
             for i in range(len(inputs)):
                 inputs[i][0] = Variable(inputs[i][0]).to(args.device)
             # zero_grad
@@ -132,7 +132,7 @@ def eval_rl(data_loader, args, model, epoch):
     policy = Policy(args=args)
     rewards_epoch, total_batch = 0, 0
     for data in data_loader:
-        inputs, label, sql_labels = data
+        inputs, (label, _), sql_labels = data
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
         # feed forward

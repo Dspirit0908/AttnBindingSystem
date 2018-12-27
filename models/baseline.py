@@ -40,20 +40,15 @@ class Baseline(nn.Module):
         self.table_encoder = TableRNNEncoder(self.args)
         # question-table attention
         self.ques_table_attn = GlobalAttention(self.args, dim=2 * self.hidden_size, attn_type="mlp")
-        # top_encoder_lstm
-        self.top_encoder_lstm = nn.LSTM(2 * args.hidden_size, args.hidden_size, bidirectional=True, batch_first=False,
-                                  num_layers=args.num_layers, dropout=args.dropout_p)
         # point_net_decoder
-        # self.pointer_net_decoder = Decoder(embedding_dim=2*self.args.hidden_size, hidden_dim=2*self.args.hidden_size, cuda=self.args.cuda)
         self.pointer_net_decoder = PointerNetRNNDecoder(self.args, input_dim=self.args.word_dim)
-        self.attn_decoder = AttnDecoderRNN(self.args)
         # decoder_input
         self.decoder_input = nn.Parameter(torch.zeros(1, 2 * self.args.hidden_size), requires_grad=False).to(self.args.device)
         # unk tensor
         self.unk_tensor = nn.Parameter(torch.zeros(1, self.args.word_dim), requires_grad=False).to(self.args.device)
         self.init_parameters()
-        self.gate = nn.Linear(2 * self.args.hidden_size, 2)
-        self.transform_in = nn.Linear(4 * self.args.hidden_size, 2 * self.args.hidden_size)
+        # gate
+        self.gate = nn.Linear(2 * self.args.hidden_size, 3)
 
     def init_parameters(self):
         torch.nn.init.xavier_uniform_(self.decoder_input)
@@ -65,33 +60,34 @@ class Baseline(nn.Module):
         pos_tag = inputs[1][0]
         columns_split, columns_split_len = inputs[2]
         columns_split_marker, columns_split_marker_len = inputs[3]  # _, (batch_size)
-        # cells_split, cells_split_len = inputs[4]
-        # cells_split_marker, cells_split_marker_len = inputs[5]  # _, (batch_size)
+        cells_split, cells_split_len = inputs[4]
+        cells_split_marker, cells_split_marker_len = inputs[5]  # _, (batch_size)
         batch_size = tokenize.size(0)
         # encode token
         token_embed = self.token_embedding(tokenize)
         token_embed = token_embed.transpose(0, 1).contiguous()  # (tokenize_max_len, batch_size, word_dim)
-        logger.debug('token_embed')
-        logger.debug(token_embed)
         # add pos_tag on token_embed
         pos_tag_embed = self.pos_tag_embedding(pos_tag).transpose(0, 1).contiguous()  # (tokenize_max_len, batch_size, word_dim)
         token_embed += pos_tag_embed
         # unk_tensor
         # unk_tensor = self.unk_tensor.unsqueeze(0).expand(batch_size, 1, -1).transpose(0, 1).contiguous()  # (1, batch_size, word_dim)
-        # input_tensor = torch.cat([unk_tensor, token_embed], dim=0)  # (tokenize_max_len + 1, batch_size, word_dim)
         # run token lstm
         token_out, token_hidden = runBiRNN(self.token_lstm, token_embed, tokenize_len, total_length=self.args.tokenize_max_len)  # (tokenize_max_len, batch_size, 2*hidden_size), _
-        # encode table
+        # encode columns
         col_embed = self.token_embedding(columns_split).transpose(0, 1).contiguous()  # (columns_token_max_len, batch_size, word_dim)
-        col_out, col_hidden = self.table_encoder(self.token_lstm, col_embed, columns_split_len, columns_split_marker, hidden=token_hidden, total_length=self.args.columns_token_max_len)  # (columns_split_marker_max_len - 1, batch_size, 2*hidden_size)
-        memory_bank = torch.cat([token_out, col_out], dim=0).transpose(0, 1).contiguous()
-
+        col_out, col_hidden = self.table_encoder(self.token_lstm, col_embed, columns_split_len, columns_split_marker, hidden=token_hidden, total_length=self.args.columns_token_max_len)  # (columns_split_marker_max_len - 1, batch_size, 2 * hidden_size)
+        # encode cells
+        cell_embed = self.token_embedding(cells_split).transpose(0,1).contiguous()
+        cell_out, cell_hidden = self.table_encoder(self.token_lstm, cell_embed, cells_split_len, cells_split_marker, hidden=col_hidden, total_length=self.args.cells_token_max_len)
+        memory_bank = torch.cat([token_out, col_out, cell_out], dim=0).transpose(0, 1).contiguous()
         # decode one step
         pointer_align_scores, _, _ = self.pointer_net_decoder(tgt=token_embed, src=memory_bank, hidden=col_hidden,
                                                                 tgt_lengths=tokenize_len,
                                                                 tgt_max_len=self.args.tokenize_max_len,
                                                                 src_lengths=None,
                                                                 src_max_len=None)
+        logger.info('pointer_align_scores'), logger.info(pointer_align_scores.size())
+        # (batch_size, tgt_len, src_len)
         return pointer_align_scores
 
         # # decode step by step
