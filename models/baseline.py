@@ -8,7 +8,7 @@ import numpy as np
 from torch import nn
 from utils import runBiRNN, sequence_mask
 from models.modules.TableRNNEncoder import TableRNNEncoder
-from models.modules.Attention import Attention
+from models.modules.GlobalAttention import GlobalAttention
 from sklearn.metrics import confusion_matrix
 from models.modules.PointerNet import PointerNetRNNDecoder
 from models.modules.PointerNetDecoderStep import Decoder
@@ -39,7 +39,7 @@ class Baseline(nn.Module):
                                num_layers=args.num_layers, dropout=args.dropout_p)
         self.table_encoder = TableRNNEncoder(self.args)
         # question-table attention
-        self.ques_table_attn = Attention('general', dim=2*self.hidden_size, args=self.args)
+        self.ques_table_attn = GlobalAttention(self.args, dim=2 * self.hidden_size, attn_type="mlp")
         # top_encoder_lstm
         self.top_encoder_lstm = nn.LSTM(2 * args.hidden_size, args.hidden_size, bidirectional=True, batch_first=False,
                                   num_layers=args.num_layers, dropout=args.dropout_p)

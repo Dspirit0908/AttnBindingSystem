@@ -117,9 +117,14 @@ def preprocess(mode, lower=True):
             # must to lower() for match value in cells and question
             info['cells'] = [cell.lower() for cell in cells if cell.lower().replace(' ', '') in tokenize_ngram]
             # change conds_values to index_list
-            info['sql_index'] = copy.deepcopy(info['sql'])
-            for cond in info['sql_index']['conds']:
-                cond[2] = tokenize_ngram[str(cond[2]).lower().replace(' ', '')]
+            # todo: handle Exception
+            try:
+                info['sql_index'] = copy.deepcopy(info['sql'])
+                for cond in info['sql_index']['conds']:
+                    cond[2] = tokenize_ngram[str(cond[2]).lower().replace(' ', '')]
+            except Exception as e:
+                print(e)
+                continue
             # try get label
             info['label'] = []
             if info['question'] in label_info:
