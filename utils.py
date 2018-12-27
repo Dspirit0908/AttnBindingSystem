@@ -60,11 +60,11 @@ def preprocess(mode):
     data_path, out_path = get_wikisql_path(mode), get_preprocess_path(mode)
     with open(data_path) as f, open(out_path, 'w') as out_f:
         UNK_TERM = {'CoreTerm', 'UnknownTerm', 'AdjectiveTerm', 'VisualTerm'}
+        client = CoreNLPClient(server='http://localhost:9000', default_annotators=['ssplit', 'tokenize', 'pos'])
         for line_index, line in enumerate(f):
             info = json.loads(line.strip())
             # sentence split, tokenize, pos
             tokenize, origin, pos_tag, after = [], [], [], []
-            client = CoreNLPClient(server='http://localhost:9000', default_annotators=['ssplit', 'tokenize', 'pos'])
             for s in client.annotate(info['question']):
                 for t in s:
                     tokenize.append(t.word), origin.append(t.originalText), pos_tag.append(t.pos), after.append(t.after)
@@ -82,9 +82,10 @@ def preprocess(mode):
                 ngram = set()
                 for length in range(1, len(s_list) + 1):
                     for i in range(len(s_list) - length + 1):
-                        ngram.add(''.join(s_list[i:i+length]))
+                        ngram.add(''.join(s_list[i:i+length]).lower())
                 return ngram
-            cells = [cell.lower() for cell in cells if cell.lower().replace(' ', '') in _get_ngram(info['tokenize'])]
+            tokenize_ngram = _get_ngram(info['original'])
+            cells = [cell.lower() for cell in cells if cell.lower().replace(' ', '') in tokenize_ngram]
             info['cells'] = cells
             # try get label
             info['label'] = []
