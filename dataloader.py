@@ -17,7 +17,7 @@ class BindingDataset(Dataset):
         # get path
         data_path, tables_path = get_preprocess_path(mode), get_wikisql_tables_path(mode)
         # load data
-        tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = load_data(data_path, only_label=self.args.only_label)
+        tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, cells_list, label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = load_data(data_path, only_label=self.args.only_label)
         # get len
         self.len = len(tokenize_list)
         # read tables

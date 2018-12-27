@@ -19,7 +19,6 @@ class Args(object):
         self.log_trian_interval = 10
         self.log_test_interval = 1
         self.dropout_p = 0.1
-        self.load_cell = False
         self.load_w2v = False
         self.only_label = False
         self.shuffle = True

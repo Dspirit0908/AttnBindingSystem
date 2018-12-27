@@ -15,6 +15,7 @@ from nltk.tokenize import WordPunctTokenizer
 from stanza.nlp.corenlp import CoreNLPClient
 from config import wikisql_path, preprocess_path, word_embedding_path
 
+client = None
 UNK_WORD = '<unk>'
 SPLIT_WORD = '<|>'
 PAD_WORD = '<blank>'
@@ -45,48 +46,73 @@ def get_preprocess_path(mode):
     return preprocess_path + mode + '.jsonl'
 
 
-def preprocess(mode):
+def get_annotate(sentence, lower=True):
+    # todo: handle [Salmonella spp.] -> ['salmonella', 'spp.', '.']
+    global client
+    if client is None:
+        client = CoreNLPClient(server='http://localhost:9000', default_annotators=['ssplit', 'tokenize', 'pos'])
+    tokenize, origin, pos_tag, after = [], [], [], []
+    for s in client.annotate(sentence):
+        for t in s:
+            if lower:
+                tokenize.append(t.word.lower()), origin.append(t.originalText.lower()), pos_tag.append(t.pos), after.append(t.after)
+            else:
+                tokenize.append(t.word), origin.append(t.originalText), pos_tag.append(t.pos), after.append(t.after)
+    return tokenize, origin, pos_tag, after
+
+
+def get_ngram(s_list):
+    ngram = set()
+    for length in range(1, len(s_list) + 1):
+        for i in range(len(s_list) - length + 1):
+            ngram.add(''.join(s_list[i:i + length]).lower())
+    return ngram
+
+
+def get_split(iter, lower):
     """
-    write [tokenize, pos_tag, lemma] to a new file. only need at beginning.
-    # lemma [seems] not good for this task. eg: (ks) -> (k). or need lemma tokens and columns together.
+    get split and split_marker.
+    """
+    # if lower is False: [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
+    columns = list(map(lambda column: get_annotate(column, lower), iter))
+    # ['<|>', 'Player', '<|>', 'No', '.', '<|>', 'Nationality', '<|>', 'Position', '<|>', 'Years', 'in', 'Toronto', '<|>', 'School', '/', 'Club', 'Team', '<|>']
+    columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
+    # [0, 2, 5, 7, 9, 13, 18]
+    columns_split_marker = [index for index in range(len(columns_split)) if columns_split[index] == SPLIT_WORD]
+    return columns_split, columns_split_marker
+
+
+def preprocess(mode, lower=True):
+    """
+    only need at beginning. stanza may crash on Windows, can work on Linux.
     :param mode: 'train', 'dev' or 'test'.
-    :return:
     """
     print('preprocessing {}'.format(mode))
+    # load label info and table info
     label_path = './data/' + 'sql_label_' + mode + '_final_label1.json'
     label_info = read_json(label_path, 'Utterance')
     table_info = read_json(get_wikisql_tables_path(mode), 'id')
-
+    # preprocess data
     data_path, out_path = get_wikisql_path(mode), get_preprocess_path(mode)
     with open(data_path) as f, open(out_path, 'w') as out_f:
         UNK_TERM = {'CoreTerm', 'UnknownTerm', 'AdjectiveTerm', 'VisualTerm'}
-        client = CoreNLPClient(server='http://localhost:9000', default_annotators=['ssplit', 'tokenize', 'pos'])
-        for line_index, line in enumerate(f):
+        for line in f:
             info = json.loads(line.strip())
-            # sentence split, tokenize, pos
-            tokenize, origin, pos_tag, after = [], [], [], []
-            for s in client.annotate(info['question']):
-                for t in s:
-                    tokenize.append(t.word), origin.append(t.originalText), pos_tag.append(t.pos), after.append(t.after)
-            info['tokenize'], info['original'], info['pos_tag'], info['after'] = tokenize, origin, pos_tag, after
+            info['tokenize'], info['original'], info['pos_tag'], info['after'] = get_annotate(info['question'], lower=lower)
+            assert len(info['tokenize']) == len(info['original']) == len(info['pos_tag']) == len(info['after'])
             # get cells
             cells = set()
             for s_list in table_info[info['table_id']]['rows']:
                 for word in s_list:
                     cells.add(str(word))
             # filter cells
-            # the next line need handle "cells": ["1", "8", "8abx15", "5"]
+            # the first way: need handle "cells": ["1", "8", "8abx15", "5"]
             # cells = [cell.lower() for cell in cells if cell.lower() in info['question'].lower()]
-
-            def _get_ngram(s_list):
-                ngram = set()
-                for length in range(1, len(s_list) + 1):
-                    for i in range(len(s_list) - length + 1):
-                        ngram.add(''.join(s_list[i:i+length]).lower())
-                return ngram
-            tokenize_ngram = _get_ngram(info['original'])
-            cells = [cell.lower() for cell in cells if cell.lower().replace(' ', '') in tokenize_ngram]
-            info['cells'] = cells
+            # the second way
+            # todo: (1980.0 in question, 1980 in cell; 14 in question, +14/14. in cell)
+            tokenize_ngram = get_ngram(info['original'])
+            # must to lower() for match value in cells and question
+            info['cells'] = [cell.lower() for cell in cells if cell.lower().replace(' ', '') in tokenize_ngram]
             # try get label
             info['label'] = []
             if info['question'] in label_info:
@@ -101,10 +127,10 @@ def preprocess(mode):
                             label_split = label.split('_')
                             if label_split[0] in UNK_TERM:
                                 info['label'].append(UNK_WORD)
-                            # todo: NumberRangeTerm need to handle in other way
                             elif label_split[0] == 'ValueTerm':
                                 value = '_'.join(label_split[1:-2]).lower()
                                 info['label'].append('Value_' + str(info['cells'].index(value)))
+                            # todo: NumberRangeTerm need to handle some special situations
                             elif label_split[0] == 'NumberRangeTerm':
                                 try:
                                     value = '_'.join(label_split[1:-2]).lower()
@@ -117,18 +143,20 @@ def preprocess(mode):
                                             value = value[:-2]
                                         info['label'].append('Value_' + str(info['cells'].index(value)))
                                     else:
-                                        raise Exception("Not Handle", value)
+                                        raise Exception("Value Not Handle", value)
                             elif label_split[0] == 'ColumnTerm':
                                 column = '_'.join(label_split[1:-2])
                                 info['label'].append('Column_' + str(table_info[info['table_id']]['header'].index(column)))
                             else:
-                                print(label)
+                                raise Exception("Label Not Handle", label)
                         assert len(info['label']) == len(info['tokenize'])
                     except Exception as e:
                         print(e)
                         print(info['question'])
                         info['label'] = []
-            assert len(info['tokenize']) == len(info['original']) == len(info['pos_tag'])
+            # get columns/cells split and split_marker
+            info['columns_split'], info['columns_split_marker'] = get_split(table_info[info['table_id']]['header'], lower=lower)
+            info['cells_split'], info['cells_split_marker'] = get_split(info['cells'], lower=lower)
             out_f.write(json.dumps(info) + '\n')
 
 
@@ -138,6 +166,7 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
     tokenize_list, tokenize_len_list = [], []
     pos_tag_list = []
     table_id_list = []
+    cells_list = []
     # a list, list of list, list of list of list
     sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = [], [], []
     with open(path) as f:
@@ -162,25 +191,29 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
             pos_tag = info['pos_tag']
             table_id = info['table_id']
             sel_col = info['sql']['sel']
+            cells = info['cells']
             conds_cols, conds_values = [], []
             conds_values_flag = True
             for cond in info['sql']['conds']:
                 conds_cols.append(cond[0])
-                value_index = find_value_index(value=str(cond[2]), token_list=tokenize, lower=lower)
+                value_list = get_annotate(str(cond[2]), lower=lower)[0]
+                value_index = find_value_index(value_list, token_list=tokenize)
                 # todo: handle this situation
                 if value_index is None:
                     # need drop the data
                     tokenize_list.pop()
                     conds_values_flag = False
+                    print(value_list[0]), print(tokenize)
                     break
                 else:
                     conds_values.append(value_index)
             # append
             if conds_values_flag:
-                label_list.append(label)
                 tokenize_len_list.append(len(tokenize))
                 pos_tag_list.append(pos_tag)
                 table_id_list.append(table_id)
+                cells_list.append(cells)
+                label_list.append(label)
                 sql_sel_col_list.append(sel_col), sql_conds_cols_list.append(conds_cols), sql_conds_values_list.append(conds_values)
     if only_tokenize:
         return tokenize_list
@@ -188,11 +221,11 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
         # check
         assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list)\
                == len(label_list) == len(sql_sel_col_list) == len(sql_conds_cols_list) == len(sql_conds_values_list)
-        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, label_list,\
+        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, cells_list, label_list,\
                sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
 
 
-def load_tables(path, vocab=False, lower=True, load_cell=True):
+def load_tables(path, vocab=False, lower=True):
     print('loading {}'.format(path))
     tables_info = {}
     # for vocab
@@ -203,34 +236,10 @@ def load_tables(path, vocab=False, lower=True, load_cell=True):
             key = info['id']
             if key not in tables_info:
                 tables_info[key] = {}
-            # read cells from m_lists to a list
-            if load_cell:
-                cells = set()
-                for s_list in info['rows']:
-                    for word in s_list:
-                        cells.add(str(word))
-                cells = list(cells)
-            # handle columns and cells
-            def _handle(iter, lower):
-                if lower:
-                    columns = list(map(lambda column: WordPunctTokenizer().tokenize(str(column).lower()), iter))
-                else:
-                    # [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
-                    columns = list(map(lambda column: WordPunctTokenizer().tokenize(str(column)), info['header']))
-                # ['<|>', 'Player', '<|>', 'No', '.', '<|>', 'Nationality', '<|>', 'Position', '<|>', 'Years', 'in', 'Toronto', '<|>', 'School', '/', 'Club', 'Team', '<|>']
-                columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
-                # [0, 2, 5, 7, 9, 13, 18]
-                columns_split_marker = [index for index in range(len(columns_split)) if columns_split[index] == SPLIT_WORD]
-                return columns_split, columns_split_marker
-            
             if vocab:
-                vocab_list.append(_handle(info['header'], lower)[0])
-                if load_cell:
-                    vocab_list.append(_handle(cells, lower)[0])
+                vocab_list.append(get_split(info['header'], lower)[0])
             else:
-                tables_info[key]['columns_split'], tables_info[key]['columns_split_marker'] = _handle(info['header'], lower)
-                if load_cell:
-                    tables_info[key]['cells_split'], tables_info[key]['cells_split_marker'] = _handle(cells, lower)
+                tables_info[key]['columns_split'], tables_info[key]['columns_split_marker'] = get_split(info['header'], lower)
     return vocab_list if vocab else tables_info
 
 
@@ -336,19 +345,15 @@ def pad(m_lists, max_len, pad_token=0):
     return idxs_list
 
 
-def find_value_index(value, token_list, lower):
+def find_value_index(value_list, token_list):
     """
-    :param value: string
+    :param value_list: value list
     :param token_list: token list
-    :param lower: whether the value need to be lower()
     :return: a list: [start_index, end_index + 1] or None
     """
-    value_tokenize = WordPunctTokenizer().tokenize(value)
-    if lower:
-        value_tokenize = [v.lower() for v in value_tokenize]
-    value_length = len(value_tokenize)
+    value_length = len(value_list)
     for start_index in range(len(token_list) - value_length + 1):
-        if value_tokenize[:] == token_list[start_index:start_index + value_length]:
+        if value_list[:] == token_list[start_index:start_index + value_length]:
             return [start_index, start_index + value_length]
     return None
 
