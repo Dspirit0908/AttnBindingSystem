@@ -47,6 +47,7 @@ def get_preprocess_path(mode):
 
 
 def get_annotate(sentence, lower=True):
+    # notice return 4 infos
     # todo: handle [Salmonella spp.] -> ['salmonella', 'spp.', '.']
     global client
     if client is None:
@@ -73,13 +74,16 @@ def get_split(iter, lower):
     """
     get split and split_marker.
     """
+    if len(iter) == 0: return [], 0, [], 0
     # if lower is False: [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
-    columns = list(map(lambda column: get_annotate(column, lower), iter))
+    columns = list(map(lambda column: get_annotate(column, lower)[0], iter))
     # ['<|>', 'Player', '<|>', 'No', '.', '<|>', 'Nationality', '<|>', 'Position', '<|>', 'Years', 'in', 'Toronto', '<|>', 'School', '/', 'Club', 'Team', '<|>']
     columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
+    columns_split_len = len(columns_split)
     # [0, 2, 5, 7, 9, 13, 18]
     columns_split_marker = [index for index in range(len(columns_split)) if columns_split[index] == SPLIT_WORD]
-    return columns_split, columns_split_marker
+    columns_split_marker_len = len(columns_split_marker)
+    return columns_split, columns_split_len, columns_split_marker, columns_split_marker_len
 
 
 def preprocess(mode, lower=True):
@@ -155,8 +159,8 @@ def preprocess(mode, lower=True):
                         print(info['question'])
                         info['label'] = []
             # get columns/cells split and split_marker
-            info['columns_split'], info['columns_split_marker'] = get_split(table_info[info['table_id']]['header'], lower=lower)
-            info['cells_split'], info['cells_split_marker'] = get_split(info['cells'], lower=lower)
+            info['columns_split'], info['columns_split_len'], info['columns_split_marker'], info['columns_split_marker_len'] = get_split(table_info[info['table_id']]['header'], lower=lower)
+            info['cells_split'], info['cells_split_len'], info['cells_split_marker'], info['cells_split_marker_len'] = get_split(info['cells'], lower=lower)
             out_f.write(json.dumps(info) + '\n')
 
 
