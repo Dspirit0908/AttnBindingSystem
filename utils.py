@@ -63,18 +63,28 @@ def preprocess(mode):
         for line_index, line in enumerate(f):
             info = json.loads(line.strip())
             # sentence split, tokenize, pos
-            tokenize, origin, pos_tag = [], [], []
+            tokenize, origin, pos_tag, after = [], [], [], []
             client = CoreNLPClient(server='http://localhost:9000', default_annotators=['ssplit', 'tokenize', 'pos'])
             for s in client.annotate(info['question']):
                 for t in s:
-                    tokenize.append(t.word), origin.append(t.originalText), pos_tag.append(t.pos)
-            info['tokenize'], info['original'], info['pos_tag'] = tokenize, origin, pos_tag
+                    tokenize.append(t.word), origin.append(t.originalText), pos_tag.append(t.pos), after.append(t.after)
+            info['tokenize'], info['original'], info['pos_tag'], info['after'] = tokenize, origin, pos_tag, after
             # get cells
             cells = set()
             for s_list in table_info[info['table_id']]['rows']:
                 for word in s_list:
                     cells.add(str(word))
-            cells = [word.lower() for word in cells if word.lower() in info['question'].lower()]
+            # filter cells
+            # the next line need handle "cells": ["1", "8", "8abx15", "5"]
+            # cells = [cell.lower() for cell in cells if cell.lower() in info['question'].lower()]
+
+            def _get_ngram(s_list):
+                ngram = set()
+                for length in range(1, len(s_list) + 1):
+                    for i in range(len(s_list) - length + 1):
+                        ngram.add(''.join(s_list[i:i+length]))
+                return ngram
+            cells = [cell.lower() for cell in cells if cell.lower().replace(' ', '') in _get_ngram(info['tokenize'])]
             info['cells'] = cells
             # try get label
             info['label'] = []
@@ -98,13 +108,15 @@ def preprocess(mode):
                                 try:
                                     value = '_'.join(label_split[1:-2]).lower()
                                     info['label'].append('Value_' + str(info['cells'].index(value)))
-                                except:
+                                except Exception as e:
                                     value = '_'.join(label_split[1:-2]).lower()
                                     if 'than' in value:
                                         value = value.split(' than ')[1]
                                         if value.endswith('.0'):
                                             value = value[:-2]
                                         info['label'].append('Value_' + str(info['cells'].index(value)))
+                                    else:
+                                        raise Exception("Not Handle", value)
                             elif label_split[0] == 'ColumnTerm':
                                 column = '_'.join(label_split[1:-2])
                                 info['label'].append('Column_' + str(table_info[info['table_id']]['header'].index(column)))
