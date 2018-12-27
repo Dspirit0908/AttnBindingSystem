@@ -198,6 +198,9 @@ def load_data(path, vocab=False, only_label=False):
             for cond in info['sql_index']['conds']:
                 conds_cols.append(cond[0])
                 conds_values.append(cond[2])
+            # todo: handle this situation, cause runBiRNN crash
+            if info['cells_split_len'] == 0:
+                continue
             # append
             tokenize_list.append(tokenize), tokenize_len_list.append(len(tokenize))
             pos_tag_list.append(info['pos_tag'])

@@ -86,7 +86,7 @@ class Baseline(nn.Module):
                                                                 tgt_max_len=self.args.tokenize_max_len,
                                                                 src_lengths=None,
                                                                 src_max_len=None)
-        logger.info('pointer_align_scores'), logger.info(pointer_align_scores.size())
+        logger.debug('pointer_align_scores'), logger.debug(pointer_align_scores.size())
         # (batch_size, tgt_len, src_len)
         return pointer_align_scores
 

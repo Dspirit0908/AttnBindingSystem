@@ -55,7 +55,7 @@ def train(train_loader, dev_loader, args, model):
         if epoch % args.log_test_interval == 0:
             correct, total = eval(dev_loader, args, model, epoch=epoch, s_time=s_time)
             if correct > best_correct and correct > 1500:
-                torch.save(model, './res/' + str(correct) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time())))
+                torch.save(model, './res_2/' + str(correct) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time())))
             best_correct = max(best_correct, correct)
     print('best correct: {}'.format(best_correct))
 
@@ -138,7 +138,7 @@ def eval_rl(data_loader, args, model, epoch):
         # feed forward
         logit = model(inputs)
         tokenize_len = inputs[0][1]
-        reward = policy.select_max_action(logit, tokenize_len, sql_labels)
+        actions, reward = policy.select_max_action(logit, tokenize_len, sql_labels)
         rewards_epoch += reward.sum()
         total_batch += reward.size(0)
     logger.info('reward_epoch {}'.format(str(epoch)))

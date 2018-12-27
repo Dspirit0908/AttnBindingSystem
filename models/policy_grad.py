@@ -29,11 +29,29 @@ class Policy:
         rewards = self.compute_rewards(actions, sql_labels, mode='rewards')
         return torch.sum(log_probs, dim=1), rewards
 
+    # todo: sample m actions
+    def select_m_actions(self, probs, lengths, sql_labels):
+        batch_size = probs.size(0)
+        # notice the max_len
+        max_len = probs.size(1)
+        actions, log_probs = torch.LongTensor(batch_size, max_len).to(device=self.args.device), torch.FloatTensor(batch_size, max_len).to(device=self.args.device)
+        probs = probs.transpose(0, 1).contiguous()
+        for ti in range(max_len):
+            actions[:, ti], log_probs[:, ti] = self.select_action_step(probs[ti])
+        # mask
+        mask = sequence_mask(lengths, max_len).to(device=self.args.device)
+        actions.data.masked_fill_(1 - mask, -100)
+        log_probs.data.masked_fill_(1 - mask, 0.0)
+        # compute rewards
+        rewards = self.compute_rewards(actions, sql_labels, mode='rewards')
+        return torch.sum(log_probs, dim=1), rewards
+
     def select_action_step(self, probs_step):
         m = Categorical(probs_step)
         action = m.sample()
         return action, m.log_prob(action)
 
+    # select max action, for test
     def select_max_action(self, probs, lengths, sql_labels):
         batch_size, max_len = probs.size(0), probs.size(1)
         actions = torch.max(probs, 2)[1]
@@ -42,7 +60,7 @@ class Policy:
         actions.data.masked_fill_(1 - mask, -100)
         # compute acc
         rewards = self.compute_rewards(actions, sql_labels, mode='acc')
-        return rewards
+        return actions, rewards
 
     def compute_rewards(self, actions, sql_labels, mode='rewards'):
         batch_size = actions.size(0)
@@ -57,8 +75,8 @@ class Policy:
         return rewards
 
     def compute_rewards_step(self, action, sel_col, conds_cols, conds_values):
-        action_cols = [tag - 2 * self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= 2 * self.args.tokenize_max_len]
-        action_vals = [tag - self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= self.args.tokenize_max_len and tag < 2 * self.args.tokenize_max_len]
+        action_cols = [tag - self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= self.args.tokenize_max_len and tag < self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
+        action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
         sql_values = []
         for value in conds_values.data.cpu().numpy():
             if value[0] != -100:
@@ -75,16 +93,12 @@ class Policy:
             if action_conds_cols.issubset(set(conds_cols.data.cpu().numpy())):
                 if action_vals == sql_values:
                     reward = 1.0
-        # print(action_cols, sel_col, conds_cols)
-        # print(action_vals, sql_values)
-        # print(reward)
         return reward
-    # select max action, for test
     
     # reward 1 or 0, for test to compute acc
     def compute_acc_step(self, action, sel_col, conds_cols, conds_values):
-        action_cols = [tag - 2 * self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= 2 * self.args.tokenize_max_len]
-        action_vals = [tag - self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= self.args.tokenize_max_len and tag < 2 * self.args.tokenize_max_len]
+        action_cols = [tag - self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= self.args.tokenize_max_len and tag < self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
+        action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
         sql_values = []
         for value in conds_values.data.cpu().numpy():
             if value[0] != -100:
@@ -99,6 +113,11 @@ class Policy:
             if action_conds_cols.issubset(set(conds_cols.data.cpu().numpy())):
                 if action_vals == sql_values:
                     reward = 1.0
+        # print(action)
+        # print(action_cols, sel_col, conds_cols)
+        # print(action_vals, sql_values)
+        # print(reward)
+        # print('######')
         return reward
 
 

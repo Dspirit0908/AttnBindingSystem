@@ -14,7 +14,7 @@ from utils import UNK_WORD, build_all_vocab, set_seed, load_word_embedding
 
 def main(mode):
     # set environ, args, seed, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '4'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
     args = Args()
     set_seed(args.seed)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -22,7 +22,7 @@ def main(mode):
     # build vocab
     word2index, index2word = build_all_vocab(init_vocab={UNK_WORD: 0})
     args.vocab, args.vocab_size = word2index, len(word2index)
-    # get data_from_train from only_label = False, for same as train baseline
+    # get data_from_train from only_label = True, for same as train baseline
     args.only_label = True
     train_dataset = BindingDataset('train', args=args)
     data_from_train = (train_dataset.tokenize_max_len, train_dataset.columns_token_max_len,
@@ -46,9 +46,9 @@ def main(mode):
         model = Baseline(args)
         train(train_dataloader, dev_dataloader, args=args, model=model)
     elif mode == 'policy gradient':
-        model = torch.load('./res/1516')
+        model = torch.load('./res/2009', map_location=lambda storage, loc: storage.cuda(0))
         train_rl(train_dataloader, dev_dataloader, args=args, model=model)
 
 
 if __name__ == '__main__':
-    main('train baseline')
+    main('policy gradient')
