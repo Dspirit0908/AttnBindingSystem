@@ -134,7 +134,7 @@ def preprocess(mode, lower=True):
                             elif label_split[0] == 'ValueTerm':
                                 value = '_'.join(label_split[1:-2]).lower()
                                 info['label'].append('Value_' + str(info['cells'].index(value)))
-                            # todo: NumberRangeTerm need to handle some special situations
+                            # todo: NumberRangeTerm need to handle some special situations, use SQL?
                             elif label_split[0] == 'NumberRangeTerm':
                                 try:
                                     value = '_'.join(label_split[1:-2]).lower()
@@ -164,13 +164,14 @@ def preprocess(mode, lower=True):
             out_f.write(json.dumps(info) + '\n')
 
 
-def load_data(path, only_tokenize=False, only_label=False, lower=True):
+def load_data(path, vocab=False, only_label=False):
     print('loading {}'.format(path))
-    label_list = []
     tokenize_list, tokenize_len_list = [], []
     pos_tag_list = []
     table_id_list = []
-    cells_list = []
+    columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list = [], [], [], []
+    cells_split_list, cells_split_len_list, cells_split_marker_list, cells_split_marker_len_list = [], [], [], []
+    label_list = []
     # a list, list of list, list of list of list
     sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = [], [], []
     with open(path) as f:
@@ -183,29 +184,16 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
                 if len(label) == 0:
                     continue
             # get tokenize
-            if lower:
-                tokenize = [word.lower() for word in info['tokenize']]
-            else:
-                tokenize = info['tokenize']
-            tokenize_list.append(tokenize)
-            # if only_tokenize for build vocab, continue.
-            if only_tokenize:
-                continue
-            # get other infos
-            pos_tag = info['pos_tag']
-            table_id = info['table_id']
-            sel_col = info['sql']['sel']
-            cells = info['cells']
+            tokenize = info['tokenize']
+            # get conds
             conds_cols, conds_values = [], []
             conds_values_flag = True
             for cond in info['sql']['conds']:
                 conds_cols.append(cond[0])
-                value_list = get_annotate(str(cond[2]), lower=lower)[0]
+                value_list = get_annotate(str(cond[2]), lower=True)[0]
                 value_index = find_value_index(value_list, token_list=tokenize)
                 # todo: handle this situation
                 if value_index is None:
-                    # need drop the data
-                    tokenize_list.pop()
                     conds_values_flag = False
                     print(value_list[0]), print(tokenize)
                     break
@@ -213,38 +201,26 @@ def load_data(path, only_tokenize=False, only_label=False, lower=True):
                     conds_values.append(value_index)
             # append
             if conds_values_flag:
-                tokenize_len_list.append(len(tokenize))
-                pos_tag_list.append(pos_tag)
-                table_id_list.append(table_id)
-                cells_list.append(cells)
+                tokenize_list.append(tokenize), tokenize_len_list.append(len(tokenize))
+                pos_tag_list.append(info['pos_tag'])
+                table_id_list.append(info['table_id'])
+                columns_split_list.append(info['columns_split']), columns_split_len_list.append(info['columns_split_len'])
+                columns_split_marker_list.append(info['columns_split_marker']), columns_split_marker_len_list.append(info['columns_split_marker_len'])
+                cells_split_list.append(info['cells_split']), cells_split_len_list.append(info['cells_split_len'])
+                cells_split_marker_list.append(info['cells_split_marker']), cells_split_marker_len_list.append(info['cells_split_marker_len'])
                 label_list.append(label)
-                sql_sel_col_list.append(sel_col), sql_conds_cols_list.append(conds_cols), sql_conds_values_list.append(conds_values)
-    if only_tokenize:
-        return tokenize_list
+                sql_sel_col_list.append(info['sql']['sel']), sql_conds_cols_list.append(conds_cols), sql_conds_values_list.append(conds_values)
+    if vocab:
+        return tokenize_list, columns_split_list
     else:
         # check
         assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list)\
-               == len(label_list) == len(sql_sel_col_list) == len(sql_conds_cols_list) == len(sql_conds_values_list)
-        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, cells_list, label_list,\
-               sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
-
-
-def load_tables(path, vocab=False, lower=True):
-    print('loading {}'.format(path))
-    tables_info = {}
-    # for vocab
-    vocab_list = []
-    with open(path) as f:
-        for line in f:
-            info = json.loads(line.strip())
-            key = info['id']
-            if key not in tables_info:
-                tables_info[key] = {}
-            if vocab:
-                vocab_list.append(get_split(info['header'], lower)[0])
-            else:
-                tables_info[key]['columns_split'], tables_info[key]['columns_split_marker'] = get_split(info['header'], lower)
-    return vocab_list if vocab else tables_info
+               == len(columns_split_list) == len(cells_split_list) == len(label_list) == len(sql_sel_col_list)\
+               == len(sql_conds_cols_list) == len(sql_conds_values_list)
+        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list,\
+               (columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list),\
+               (cells_split_list, cells_split_len_list, cells_split_marker_list, cells_split_marker_len_list),\
+               label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
 
 
 def load_word_embedding(word_dim, vocab, max_vocab_size=None):
@@ -308,16 +284,14 @@ def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_fre
 
 def build_all_vocab(init_vocab=None, min_word_freq=1):
     # need to know all the words to filter the pretrained word embeddings
-    load_only_tokenize = functools.partial(load_data, only_tokenize=True)
-    load_tables_vocab = functools.partial(load_tables, vocab=True)
+    load_vocab = functools.partial(load_data, vocab=True, only_label=False)
     mode_list = ['train', 'dev', 'test']
-    all_tokenize = []
+    vocab = []
     for mode in mode_list:
-        tokenize = load_only_tokenize(get_preprocess_path(mode))
-        all_tokenize.extend(tokenize)
-        vocab = load_tables_vocab(get_wikisql_tables_path(mode))
-        all_tokenize.extend(vocab)
-    word2index, index2word = build_vocab(all_tokenize, init_vocab=init_vocab, min_word_freq=min_word_freq)
+        tokenize_list, columns_split_list = load_vocab(get_preprocess_path(mode))
+        vocab.extend(tokenize_list)
+        vocab.extend(columns_split_list)
+    word2index, index2word = build_vocab(vocab, init_vocab=init_vocab, min_word_freq=min_word_freq)
     return word2index, index2word
 
 

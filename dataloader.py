@@ -7,7 +7,7 @@ import numpy as np
 from config import Args
 from torch.utils.data import Dataset, DataLoader
 from utils import get_wikisql_tables_path, get_preprocess_path, UNK_WORD
-from utils import load_data, load_tables, build_vocab, build_all_vocab, change2idx, pad, max_len_of_m_lists
+from utils import load_data, build_vocab, build_all_vocab, change2idx, pad, max_len_of_m_lists
 
 
 class BindingDataset(Dataset):
@@ -17,28 +17,12 @@ class BindingDataset(Dataset):
         # get path
         data_path, tables_path = get_preprocess_path(mode), get_wikisql_tables_path(mode)
         # load data
-        tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, cells_list, label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = load_data(data_path, only_label=self.args.only_label)
+        tokenize_list, tokenize_len_list, pos_tag_list, table_id_list,\
+        (columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list),\
+        (cells_split_list, cells_split_len_list, cells_split_marker_list, cells_split_marker_len_list),\
+        label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = load_data(data_path, only_label=self.args.only_label)
         # get len
         self.len = len(tokenize_list)
-        # read tables
-        tables_info = load_tables(get_wikisql_tables_path(mode))
-        
-        # get columns and cells
-        def _handle(key1, key2):
-            columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list = [], [], [], []
-            for table_id in table_id_list:
-                columns_split = tables_info[table_id][key1]
-                columns_split_list.append(columns_split)
-                columns_split_len_list.append(len(columns_split))
-    
-                columns_split_marker = tables_info[table_id][key2]
-                columns_split_marker_list.append(columns_split_marker)
-                columns_split_marker_len_list.append(len(columns_split_marker))
-            # check
-            assert len(columns_split_list) == len(columns_split_marker_list) == self.len
-            return columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list
-        columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list = _handle('columns_split', 'columns_split_marker')
-        cells_split_list, cells_split_len_list, cells_split_marker_list, cells_split_marker_len_list = _handle('cells_split', 'cells_split_marker')
         # the data that need use train's data for dev and test
         if data_from_train is None:
             self.tokenize_max_len, self.columns_token_max_len, self.columns_split_marker_max_len, self.cells_token_max_len, self.cells_split_marker_max_len =\
@@ -52,18 +36,16 @@ class BindingDataset(Dataset):
             pointer_label, gate_label = [], []
             for index, single_label in enumerate(label):
                 if single_label == UNK_WORD:
-                    # pointer_label.append(index)
-                    pointer_label.append(-100)
+                    pointer_label.append(index)
                     gate_label.append(0)
                 else:
-                    gate_label.append(1)
                     single_label_split = single_label.split('_')
-                    if single_label_split[0] == 'Value':
-                        pointer_label.append(index)
-                        # pointer_label.append(index)
-                    elif single_label_split[0] == 'Column':
+                    if single_label_split[0] == 'Column':
                         pointer_label.append(self.tokenize_max_len + int(single_label_split[1]))
-                        # pointer_label.append(index)
+                        gate_label.append(1)
+                    elif single_label_split[0] == 'Value':
+                        pointer_label.append(self.tokenize_max_len + self.columns_split_marker_max_len - 1 + int(single_label_split[1]))
+                        gate_label.append(2)
             pointer_label_list.append(pointer_label), gate_label_list.append(gate_label)
         
         # change2tensor
@@ -74,11 +56,10 @@ class BindingDataset(Dataset):
         self.columns_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_token_max_len), columns_split_len_list))).to(device)
         self.columns_split_marker_tensor = torch.LongTensor(pad(columns_split_marker_list, max_len=self.columns_split_marker_max_len, pad_token=self.columns_token_max_len - 1)).to(device)
         self.columns_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_split_marker_max_len), columns_split_marker_len_list))).to(device)
-        if self.args.load_cell:
-            self.cells_split_tensor = torch.LongTensor(pad(change2idx(cells_split_list, vocab=self.args.vocab, name='cells_split_' + mode), max_len=self.cells_token_max_len)).to(device)
-            self.cells_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_token_max_len), cells_split_len_list))).to(device)
-            self.cells_split_marker_tensor = torch.LongTensor(pad(cells_split_marker_list, max_len=self.cells_split_marker_max_len, pad_token=self.cells_token_max_len - 1)).to(device)
-            self.cells_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_split_marker_max_len), cells_split_marker_len_list))).to(device)
+        self.cells_split_tensor = torch.LongTensor(pad(change2idx(cells_split_list, vocab=self.args.vocab, name='cells_split_' + mode), max_len=self.cells_token_max_len)).to(device)
+        self.cells_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_token_max_len), cells_split_len_list))).to(device)
+        self.cells_split_marker_tensor = torch.LongTensor(pad(cells_split_marker_list, max_len=self.cells_split_marker_max_len, pad_token=self.cells_token_max_len - 1)).to(device)
+        self.cells_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_split_marker_max_len), cells_split_marker_len_list))).to(device)
         self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=-100)).to(device)
         self.gate_label_tensor = torch.LongTensor(pad(gate_label_list, max_len=self.tokenize_max_len, pad_token=-100)).to(device)
         # handle sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
@@ -88,26 +69,16 @@ class BindingDataset(Dataset):
         self.sql_conds_values_list = torch.LongTensor(pad(sql_conds_values_list, max_len=max_len_of_m_lists(sql_conds_values_list), pad_token=[-100, -100]))
 
     def __getitem__(self, index):
-        if self.args.load_cell:
-            return (
-                        [self.tokenize_tensor[index], self.tokenize_len_tensor[index]],
-                        [self.pos_tag_tensor[index], ],
-                        [self.columns_split_tensor[index], self.columns_split_len_tensor[index]],
-                        [self.columns_split_marker_tensor[index], self.columns_split_marker_len_tensor[index]],
-                        [self.cells_split_tensor[index], self.cells_split_len_tensor[index]],
-                        [self.cells_split_marker_tensor[index], self.cells_split_marker_len_tensor[index]],
-                        [self.gate_label_tensor[index], ],
-                    ), self.pointer_label_tensor[index],\
-                   (self.sql_sel_col_list[index], self.sql_conds_cols_list[index], self.sql_conds_values_list[index])
-        else:
-            return (
-                       [self.tokenize_tensor[index], self.tokenize_len_tensor[index]],
-                       [self.pos_tag_tensor[index], ],
-                       [self.columns_split_tensor[index], self.columns_split_len_tensor[index]],
-                       [self.columns_split_marker_tensor[index], self.columns_split_marker_len_tensor[index]],
-                       [self.gate_label_tensor[index], ],
-                   ), self.pointer_label_tensor[index],\
-                   (self.sql_sel_col_list[index], self.sql_conds_cols_list[index], self.sql_conds_values_list[index])
+        return (
+                    [self.tokenize_tensor[index], self.tokenize_len_tensor[index]],
+                    [self.pos_tag_tensor[index], ],
+                    [self.columns_split_tensor[index], self.columns_split_len_tensor[index]],
+                    [self.columns_split_marker_tensor[index], self.columns_split_marker_len_tensor[index]],
+                    [self.cells_split_tensor[index], self.cells_split_len_tensor[index]],
+                    [self.cells_split_marker_tensor[index], self.cells_split_marker_len_tensor[index]],
+                ),\
+                    (self.pointer_label_tensor[index], self.gate_label_tensor[index]),\
+                    (self.sql_sel_col_list[index], self.sql_conds_cols_list[index], self.sql_conds_values_list[index])
 
     def __len__(self):
         return self.len
