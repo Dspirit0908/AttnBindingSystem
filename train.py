@@ -43,10 +43,10 @@ def train(train_loader, dev_loader, args, model):
             optimizer.zero_grad()
             # feed forward
             logit = model(inputs)
-            # loss = CE(logit.permute(0, 2, 1).contiguous(), label)
-            loss = 0
-            for ti in range(logit.size()[1]):
-                loss += criterion(logit[:, ti], label[:, ti])
+            loss = criterion(logit.permute(0, 2, 1).contiguous(), label)
+            # loss = 0
+            # for ti in range(logit.size()[1]):
+            #     loss += criterion(logit[:, ti], label[:, ti])
             loss.backward()
             optimizer.step()
             # sys.exit()
@@ -54,10 +54,12 @@ def train(train_loader, dev_loader, args, model):
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
         if epoch % args.log_test_interval == 0:
             correct, total = eval(dev_loader, args, model, epoch=epoch, s_time=s_time)
-            if correct > best_correct and correct > 1500:
-                torch.save(model, './res_2/' + str(correct) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time())))
+            if correct > best_correct and correct / total > 0.6:
+                model_path = './res/' + args.model + '/' + str(correct) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time()))
+                torch.save(model, model_path)
+                logger.info('save model: {}'.format(model_path))
             best_correct = max(best_correct, correct)
-    print('best correct: {}'.format(best_correct))
+        logger.info('- epoch {}, best correct: {}'.format(str(epoch), best_correct))
 
 
 def eval(data_loader, args, model, epoch=None, s_time=time.time()):
@@ -104,7 +106,7 @@ def train_rl(train_loader, dev_loader, args, model):
     model.train()
     policy = Policy(args=args)
     # test for baseline model
-    eval_rl(dev_loader, args, model, 0)
+    best_correct_ratio = eval_rl(dev_loader, args, model, epoch=0)
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
             # unpack data
@@ -123,9 +125,15 @@ def train_rl(train_loader, dev_loader, args, model):
             loss.backward()
             optimizer.step()
         if epoch % args.log_trian_interval == 0:
-            eval_rl(train_loader, args, model, epoch)
+            _ = eval_rl(train_loader, args, model, epoch)
         if epoch % args.log_test_interval == 0:
-            eval_rl(dev_loader, args, model, epoch)
+            correct_ratio = eval_rl(dev_loader, args, model, epoch)
+            if correct_ratio > best_correct_ratio and correct_ratio > 0.7:
+                model_path = './res/policy_gradient/' + str(correct_ratio.data.cpu().numpy()) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time()))
+                torch.save(model, model_path)
+                logger.info('save model: {}'.format(model_path))
+            best_correct_ratio = max(best_correct_ratio, correct_ratio)
+        logger.info('- epoch {}, best correct ratio: {}'.format(str(epoch), best_correct_ratio))
 
 
 def eval_rl(data_loader, args, model, epoch):
@@ -143,3 +151,4 @@ def eval_rl(data_loader, args, model, epoch):
         total_batch += reward.size(0)
     logger.info('reward_epoch {}'.format(str(epoch)))
     logger.info(rewards_epoch / total_batch)
+    return rewards_epoch / total_batch

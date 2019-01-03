@@ -105,7 +105,7 @@ class GlobalAttention(nn.Module):
 
             return self.v(wquh.view(-1, dim)).view(tgt_batch, tgt_len, src_len)
 
-    def forward(self, input, context, input_lengths=None, input_max_len=None):
+    def forward(self, input, context, context_lengths=None, context_max_len=None):
         """
         input (FloatTensor): batch x tgt_len x dim: decoder's rnn's output.
         context (FloatTensor): batch x src_len x dim: src hidden states
@@ -127,8 +127,8 @@ class GlobalAttention(nn.Module):
         # compute attention scores, as in Luong et al.
         align = self.score(input, context)
 
-        if input_lengths is not None:
-            mask = self.sequence_mask(input_lengths, input_max_len)
+        if context_lengths is not None:
+            mask = self.sequence_mask(context_lengths, context_max_len)
             mask = mask.unsqueeze(1).to(self.args.device)
             # (bz, max_len) -> (bz, 1, max_len), so mask can broadcast
             align.data.masked_fill_(1 - mask, -float('inf'))

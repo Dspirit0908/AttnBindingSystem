@@ -446,6 +446,15 @@ def sequence_mask(lengths, max_len=None):
             .lt(lengths.unsqueeze(1)))
 
 
+def fix_hidden(h):
+    """
+    The encoder hidden is  (layers*directions) x batch x dim.
+    We need to convert it to layers x batch x (directions*dim).
+    """
+    h = torch.cat([h[0:h.size(0):2], h[1:h.size(0):2]], 2)
+    return h
+
+
 def count_of_diff(l1, l2):
     assert len(l1) == len(l2)
     count_of_diff, index = 0, 0
@@ -467,5 +476,5 @@ if __name__ == '__main__':
     mode_list = ['train', 'dev', 'test']
     table_id_set_list = []
     for index, mode in enumerate(mode_list):
-        preprocess(mode)
+        load_data(get_preprocess_path(mode))
     pass

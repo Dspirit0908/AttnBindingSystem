@@ -3,6 +3,7 @@
 import json
 import nltk
 import torch
+import functools
 import numpy as np
 from config import Args
 from torch.utils.data import Dataset, DataLoader
@@ -30,24 +31,34 @@ class BindingDataset(Dataset):
             self.pos_tag_vocab, _ = build_vocab(pos_tag_list, init_vocab={UNK_WORD: 0})
         else:
             self.tokenize_max_len, self.columns_token_max_len, self.columns_split_marker_max_len, self.cells_token_max_len, self.cells_split_marker_max_len, self.pos_tag_vocab = data_from_train
+
         # get labels
+        def _get_label(model, pos, index, suffix=None):
+            if model == 'gate':
+                if pos == 0: return 0
+                if pos == 1: return 1 + suffix
+                if pos == 2: return 1 + self.columns_split_marker_max_len - 1
+            elif model == 'baseline':
+                if pos == 0: return index
+                if pos == 1: return self.tokenize_max_len + suffix
+                if pos == 2: return self.tokenize_max_len + self.columns_split_marker_max_len - 1 + suffix
+        _get_label = functools.partial(_get_label, model=self.args.model)
         pointer_label_list, gate_label_list = [], []
         for label in label_list:
             pointer_label, gate_label = [], []
             for index, single_label in enumerate(label):
                 if single_label == UNK_WORD:
-                    pointer_label.append(index)
+                    pointer_label.append(_get_label(pos=0, index=index))
                     gate_label.append(0)
                 else:
                     single_label_split = single_label.split('_')
                     if single_label_split[0] == 'Column':
-                        pointer_label.append(self.tokenize_max_len + int(single_label_split[1]))
+                        pointer_label.append(_get_label(pos=1, index=index, suffix=int(single_label_split[1])))
                         gate_label.append(1)
                     elif single_label_split[0] == 'Value':
-                        pointer_label.append(self.tokenize_max_len + self.columns_split_marker_max_len - 1 + int(single_label_split[1]))
+                        pointer_label.append(_get_label(pos=2, index=index, suffix=int(single_label_split[1])))
                         gate_label.append(2)
             pointer_label_list.append(pointer_label), gate_label_list.append(gate_label)
-        
         # change2tensor
         self.tokenize_tensor = torch.LongTensor(pad(change2idx(tokenize_list, vocab=self.args.vocab, name='tokenize_'+mode), max_len=self.tokenize_max_len)).to(device)
         self.tokenize_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.tokenize_max_len), tokenize_len_list))).to(device)

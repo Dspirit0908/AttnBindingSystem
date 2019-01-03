@@ -10,7 +10,10 @@ from torch.autograd import Variable
 from utils import BOS_WORD, runBiRNN, sequence_mask
 from models.modules.TableRNNEncoder import TableRNNEncoder
 from models.modules.GlobalAttention import GlobalAttention
+from sklearn.metrics import confusion_matrix
 from models.modules.PointerNet import PointerNetRNNDecoder
+from models.modules.PointerNetDecoderStep import Decoder
+from models.modules.Decoder import AttnDecoderRNN
 
 logger = logging.getLogger('binding')
 np.set_printoptions(threshold=np.inf)
@@ -32,14 +35,10 @@ class Baseline(nn.Module):
         # token_lstm
         self.token_lstm = nn.LSTM(args.word_dim, args.hidden_size, bidirectional=True, batch_first=False,
                                num_layers=args.num_layers, dropout=args.dropout_p)
-        # table_encoder for cols and cells
+        # table_encoder
         self.table_encoder = TableRNNEncoder(self.args)
-        # point_net_decoder
-        self.pointer_net_decoder = PointerNetRNNDecoder(self.args, input_dim=self.args.word_dim)
-
-    # def init_parameters(self):
-    #     torch.nn.init.xavier_uniform_(self.decoder_input)
-    #     torch.nn.init.xavier_uniform_(self.unk_tensor)
+        # decoder_input
+        self.decoder_input = Variable(torch.LongTensor([self.args.vocab[BOS_WORD]]).to(self.args.device))
 
     def forward(self, inputs):
         # unpack inputs to data
@@ -56,6 +55,8 @@ class Baseline(nn.Module):
         # add pos_tag on token_embed
         pos_tag_embed = self.pos_tag_embedding(pos_tag).transpose(0, 1).contiguous()  # (tokenize_max_len, batch_size, word_dim)
         token_embed += pos_tag_embed
+        # unk_tensor
+        # unk_tensor = self.unk_tensor.unsqueeze(0).expand(batch_size, 1, -1).transpose(0, 1).contiguous()  # (1, batch_size, word_dim)
         # run token lstm
         token_out, token_hidden = runBiRNN(self.token_lstm, token_embed, tokenize_len, total_length=self.args.tokenize_max_len)  # (tokenize_max_len, batch_size, 2*hidden_size), _
         # encode columns
@@ -64,9 +65,8 @@ class Baseline(nn.Module):
         # encode cells
         cell_embed = self.token_embedding(cells_split).transpose(0,1).contiguous()
         cell_out, cell_hidden = self.table_encoder(self.token_lstm, cell_embed, cells_split_len, cells_split_marker, hidden=col_hidden, total_length=self.args.cells_token_max_len)
-        # concat as memory_bank
         memory_bank = torch.cat([token_out, col_out, cell_out], dim=0).transpose(0, 1).contiguous()
-        # decode one step (encode)
+        # decode one step
         pointer_align_scores, _, _ = self.pointer_net_decoder(tgt=token_embed, src=memory_bank, hidden=col_hidden,
                                                                 tgt_lengths=tokenize_len,
                                                                 tgt_max_len=self.args.tokenize_max_len,
@@ -75,3 +75,29 @@ class Baseline(nn.Module):
         logger.debug('pointer_align_scores'), logger.debug(pointer_align_scores.size())
         # (batch_size, tgt_len, src_len)
         return pointer_align_scores
+
+        # decode step by step
+        decoder_input = self.decoder_input.unsqueeze(0).expand(batch_size, 1, -1).transpose(0, 1).contiguous()  # (1, batch_size, 2 * self.args.hidden_size)
+        # decoder_input2 = token_out[0].unsqueeze(0)
+        # decoder_input = self.transform_in(torch.cat([decoder_input1, decoder_input2], dim=-1))
+        pointer_align_scores = torch.zeros(self.args.tokenize_max_len, batch_size, self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1 + self.args.cells_split_marker_max_len - 1).to(self.args.device)
+        gate_scores = torch.zeros(self.args.tokenize_max_len, batch_size, self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1).to(self.args.device)
+        # use_teacher_forcing = True if random.random() < self.args.teacher_forcing_ratio else False
+        for ti in range(self.args.tokenize_max_len):
+            pointer_align_score, output, hidden = self.pointer_net_decoder(tgt=decoder_input1, src=memory_bank, hidden=col_hidden,
+                                                                   src_lengths=None,
+                                                                   src_max_len=None)  # (batch_size, 1, tokenize_max_len + columns_split_marker_max_len), _
+            self.gate(output)
+            # (batch_size, 1)
+            pointer1 = torch.max(pointer_align_score, -1)[1]
+            # pointer2 = torch.LongTensor([ti + 1]).unsqueeze(0).expand(batch_size, 1).to(self.args.device)
+            # if use_teacher_forcing:
+            #     pointer = label[:, ti].unsqueeze(1)
+            batch_index = torch.LongTensor(range(batch_size)).contiguous().view(batch_size, 1)
+            decoder_input1 = memory_bank[batch_index, pointer1, :].transpose(0, 1).contiguous().detach()
+            # decoder_input2 = memory_bank[batch_index, pointer2, :].transpose(0, 1).contiguous().detach()
+            # decoder_input = self.transform_in(torch.cat([decoder_input1, decoder_input2], dim=-1))
+            pointer_align_scores[ti] = pointer_align_score.transpose(0, 1).contiguous()
+
+        # (batch_size, tgt_len, src_len)
+        return pointer_align_scores.transpose(0, 1).contiguous()

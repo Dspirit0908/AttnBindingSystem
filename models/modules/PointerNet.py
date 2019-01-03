@@ -15,7 +15,7 @@ class PointerNetRNNDecoder(nn.Module):
     def __init__(self, args, input_dim):
         super(PointerNetRNNDecoder, self).__init__()
         self.args = args
-        self.lstm = nn.LSTM(input_dim, self.args.hidden_size, bidirectional=True, batch_first=False,
+        self.lstm = nn.LSTM(input_dim, self.args.hidden_size, batch_first=False, bidirectional=True,
                                   num_layers=self.args.num_layers, dropout=self.args.dropout_p)
         self.attention = GlobalAttention(args=self.args, dim=2 * self.args.hidden_size, attn_type="mlp")
         
@@ -34,5 +34,5 @@ class PointerNetRNNDecoder(nn.Module):
         # Attention
         rnn_output = rnn_output.transpose(0, 1).contiguous()
         # _, (batch_size, tgt, src)
-        attn_h, align_score = self.attention(input=rnn_output, context=src, input_lengths=src_lengths, input_max_len=src_max_len)
+        attn_h, align_score = self.attention(input=rnn_output, context=src, context_lengths=src_lengths, context_max_len=src_max_len)
         return align_score, rnn_output, hidden

@@ -75,8 +75,12 @@ class Policy:
         return rewards
 
     def compute_rewards_step(self, action, sel_col, conds_cols, conds_values):
-        action_cols = [tag - self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= self.args.tokenize_max_len and tag < self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
-        action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
+        if self.args.model == 'baseline':
+            action_cols = [tag - self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= self.args.tokenize_max_len and tag < self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
+            action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
+        elif self.args.model == 'gate':
+            action_cols = [tag - 1 for tag in action.data.cpu().numpy() if tag > 0 and tag < self.args.columns_split_marker_max_len]
+            action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag == self.args.columns_split_marker_max_len]
         sql_values = []
         for value in conds_values.data.cpu().numpy():
             if value[0] != -100:
@@ -97,8 +101,12 @@ class Policy:
     
     # reward 1 or 0, for test to compute acc
     def compute_acc_step(self, action, sel_col, conds_cols, conds_values):
-        action_cols = [tag - self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= self.args.tokenize_max_len and tag < self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
-        action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
+        if self.args.model == 'baseline':
+            action_cols = [tag - self.args.tokenize_max_len for tag in action.data.cpu().numpy() if tag >= self.args.tokenize_max_len and tag < self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
+            action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
+        elif self.args.model == 'gate':
+            action_cols = [tag - 1 for tag in action.data.cpu().numpy() if tag > 0 and tag < self.args.columns_split_marker_max_len]
+            action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag == self.args.columns_split_marker_max_len]
         sql_values = []
         for value in conds_values.data.cpu().numpy():
             if value[0] != -100:
@@ -110,14 +118,15 @@ class Policy:
         action_conds_cols = set(action_cols)
         if sql_sel_col in action_conds_cols:
             action_conds_cols.remove(sql_sel_col)
-            if action_conds_cols.issubset(set(conds_cols.data.cpu().numpy())):
+            # if action_conds_cols.issubset(set(conds_cols.data.cpu().numpy())):
+            if action_conds_cols == set(conds_cols.data.cpu().numpy()):
                 if action_vals == sql_values:
                     reward = 1.0
-        # print(action)
-        # print(action_cols, sel_col, conds_cols)
-        # print(action_vals, sql_values)
-        # print(reward)
-        # print('######')
+        print(action)
+        print(action_cols, sel_col, conds_cols)
+        print(action_vals, sql_values)
+        print(reward)
+        print('######')
         return reward
 
 

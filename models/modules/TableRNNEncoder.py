@@ -10,6 +10,7 @@ from torch.nn.utils.rnn import pad_packed_sequence as unpack
 
 logger = logging.getLogger('binding')
 
+
 class TableRNNEncoder(nn.Module):
     def __init__(self, args, split_type='incell', merge_type='cat'):
         super(TableRNNEncoder, self).__init__()
@@ -22,7 +23,7 @@ class TableRNNEncoder(nn.Module):
                 nn.Linear(4 * self.hidden_size, 2 * self.hidden_size),
                 nn.Tanh())
 
-    def forward(self, encoder, tbl, tbl_len, tbl_split, hidden, total_length):
+    def forward(self, encoder, tbl, tbl_len, tbl_split, hidden=None, total_length=None):
         """
         Encode table headers.
             :param tbl: header token list
