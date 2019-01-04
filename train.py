@@ -143,6 +143,7 @@ def train_rl(train_loader, dev_loader, args, model):
 def eval_rl(data_loader, args, model, epoch):
     policy = Policy(args=args)
     rewards_epoch, total_batch = 0, 0
+    t_error_1, t_error_2, t_error_3, t_error_4 = 0, 0, 0, 0
     for data in data_loader:
         inputs, (label, _), sql_labels = data
         for i in range(len(inputs)):
@@ -150,9 +151,17 @@ def eval_rl(data_loader, args, model, epoch):
         # feed forward
         logit = model(inputs)
         tokenize_len = inputs[0][1]
-        actions, reward = policy.select_max_action(logit, tokenize_len, sql_labels)
+        actions, reward, b_error_1, b_error_2, b_error_3, b_error_4 = policy.select_max_action(logit, tokenize_len, sql_labels)
         rewards_epoch += reward.sum()
         total_batch += reward.size(0)
+        t_error_1 += b_error_1
+        t_error_2 += b_error_2
+        t_error_3 += b_error_3
+        t_error_4 += b_error_4
     logger.info('reward_epoch {}'.format(str(epoch)))
     logger.info(rewards_epoch / total_batch)
+    print('error')
+    print(t_error_1, t_error_2, t_error_3, t_error_4)
+    print('error_ratio')
+    print(t_error_1 / total_batch, t_error_2 / total_batch, t_error_3 / total_batch, t_error_4 / total_batch)
     return rewards_epoch / total_batch

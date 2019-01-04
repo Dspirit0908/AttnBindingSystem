@@ -30,7 +30,6 @@ class Policy:
         rewards = self.compute_rewards(actions, sql_labels, mode='rewards')
         return torch.sum(log_probs, dim=1), rewards
 
-    # todo: sample m actions
     def select_m_actions(self, probs, lengths, sql_labels):
         batch_size = probs.size(0)
         max_len = probs.size(1)
@@ -66,20 +65,25 @@ class Policy:
         mask = sequence_mask(lengths, max_len).to(device=self.args.device)
         actions.data.masked_fill_(1 - mask, -100)
         # compute acc
-        rewards = self.compute_rewards(actions, sql_labels, mode='acc')
-        return actions, rewards
+        b_error_1, b_error_2, b_error_3, b_error_4, rewards = self.compute_rewards(actions, sql_labels, mode='acc')
+        return actions, rewards, b_error_1, b_error_2, b_error_3, b_error_4
 
     def compute_rewards(self, actions, sql_labels, mode='rewards'):
         batch_size = actions.size(0)
         rewards = torch.FloatTensor(batch_size).to(device=self.args.device)
         batch_sel_col, batch_conds_cols, batch_conds_values = sql_labels
+        b_error_1, b_error_2, b_error_3, b_error_4 = 0, 0, 0, 0
         for bi in range(batch_size):
             pred, sel_col, conds_cols, conds_values = actions[bi], batch_sel_col[bi], batch_conds_cols[bi], batch_conds_values[bi]
             if mode == 'rewards':
                 rewards[bi] = self.compute_rewards_step(pred, sel_col, conds_cols, conds_values)
             elif mode == 'acc':
-                rewards[bi] = self.compute_acc_step(pred, sel_col, conds_cols, conds_values)
-        return rewards
+                error_1, error_2, error_3, error_4, rewards[bi] = self.compute_acc_step(pred, sel_col, conds_cols, conds_values)
+                b_error_1 += error_1
+                b_error_2 += error_2
+                b_error_3 += error_3
+                b_error_4 += error_4
+        return rewards if mode == 'rewards' else b_error_1, b_error_2, b_error_3, b_error_4, rewards
 
     def compute_rewards_step(self, action, sel_col, conds_cols, conds_values):
         if self.args.model == 'baseline':
@@ -98,12 +102,14 @@ class Policy:
         sql_sel_col = int(sel_col.data.cpu().numpy())
         action_cols_set = set(action_cols)
         if sql_sel_col in action_cols:
-            # need remove sel_col
             action_cols_set.remove(sql_sel_col)
-            # set(conds_cols.data.cpu().numpy()) include -100, but no affect for the result of issubset
-            if action_cols_set.issubset(set(conds_cols.data.cpu().numpy())):
-                if set(action_vals) == set(sql_values):
+            if set(action_vals) == set(sql_values):
+                conds_cols_set = set(conds_cols.data.cpu().numpy())
+                conds_cols_set.discard(-100)
+                if action_cols_set == conds_cols_set:
                     reward = 1.0
+                elif action_cols_set.issubset(conds_cols_set):
+                    reward = 0.0
         # print(action)
         # print(action_cols, sql_sel_col, conds_cols)
         # print(set(action_vals), set(sql_values))
@@ -140,7 +146,22 @@ class Policy:
         # print(set(action_vals), set(sql_values))
         # print(reward)
         # print('######')
-        return reward
+
+        error_1, error_2, error_3, error_4 = 0, 0, 0, 0
+        # need use action_cols that not remove sql_sel_col
+        if sql_sel_col not in action_cols:
+            error_1 = 1
+        if action_cols_set.issubset(set(conds_cols.data.cpu().numpy())):
+            error_2 = 0
+        else:
+            error_2 = 1
+        conds_cols_set = set(conds_cols.data.cpu().numpy())
+        conds_cols_set.discard(-100)
+        if action_cols_set != conds_cols_set:
+            error_3 = 1
+        if set(action_vals) != set(sql_values):
+            error_4 = 1
+        return error_1, error_2, error_3, error_4, reward
 
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@ import torch
 import logging
 import functools
 from config import Args
-from train import train, eval, train_rl
+from train import train, eval, train_rl, eval_rl
 from models.gate import Gate
 from models.baseline import Baseline
 from dataloader import BindingDataset
@@ -15,7 +15,7 @@ from utils import UNK_WORD, BOS_WORD, build_all_vocab, set_seed, load_word_embed
 
 def main(mode, model='baseline'):
     # set environ, args, seed, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '7'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '5'
     args = Args()
     args.model = model
     set_seed(args.seed)
@@ -34,6 +34,7 @@ def main(mode, model='baseline'):
     args.cells_token_max_len, args.cells_split_marker_max_len, args.pos_tag_vocab = data_from_train
     logger.info('data_from_train'), logger.info(data_from_train)
     args.only_label = False if mode == 'policy gradient' else True
+    # args.only_label = False
     # build train_dataloader
     train_dataset = BindingDataset('train', args=args, data_from_train=data_from_train)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
@@ -50,14 +51,17 @@ def main(mode, model='baseline'):
         elif args.model == 'gate':
             model = Gate(args)
         train(train_dataloader, dev_dataloader, args=args, model=model)
-    elif mode == 'test baseline':
-        model = torch.load('./res/policy_gradient/0.7287', map_location=lambda storage, loc: storage.cuda(0))
+    elif mode == 'test':
+        # also need the correct 'model' for dataloader
+        model = torch.load('./res/policy_gradient/0.7517407_15-35-39', map_location=lambda storage, loc: storage.cuda(0))
         eval(dev_dataloader, args, model, epoch=0)
+        eval_rl(dev_dataloader, args, model, epoch=0)
     elif mode == 'policy gradient':
-        model = torch.load('./res/' + args.model + '/2225', map_location=lambda storage, loc: storage.cuda(0))
+        model = torch.load('./res/' + args.model + '/2705', map_location=lambda storage, loc: storage.cuda(0))
         train_rl(train_dataloader, dev_dataloader, args=args, model=model)
 
 
 if __name__ == '__main__':
-    # main('train baseline', 'gate')
-    main('policy gradient', 'gate')
+    main('train baseline', 'gate')
+    # main('test', 'gate')
+    # main('policy gradient', 'gate')
