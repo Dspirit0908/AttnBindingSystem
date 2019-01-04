@@ -17,6 +17,7 @@ np.set_printoptions(threshold=np.inf)
 torch.set_printoptions(precision=None, threshold=None, edgeitems=None, linewidth=None, profile='full')
 
 
+# add a model, need modify main.py, dataloader.py, policy_grad.py, make a dir in res/
 class Baseline(nn.Module):
     def __init__(self, args):
         super(Baseline, self).__init__()

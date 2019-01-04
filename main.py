@@ -15,7 +15,7 @@ from utils import UNK_WORD, BOS_WORD, build_all_vocab, set_seed, load_word_embed
 
 def main(mode, model='baseline'):
     # set environ, args, seed, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '5'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '7'
     args = Args()
     args.model = model
     set_seed(args.seed)
@@ -54,9 +54,10 @@ def main(mode, model='baseline'):
         model = torch.load('./res/policy_gradient/0.7287', map_location=lambda storage, loc: storage.cuda(0))
         eval(dev_dataloader, args, model, epoch=0)
     elif mode == 'policy gradient':
-        model = torch.load('./res/baseline/2365', map_location=lambda storage, loc: storage.cuda(0))
+        model = torch.load('./res/' + args.model + '/2225', map_location=lambda storage, loc: storage.cuda(0))
         train_rl(train_dataloader, dev_dataloader, args=args, model=model)
 
 
 if __name__ == '__main__':
-    main('train baseline', 'baseline')
+    # main('train baseline', 'gate')
+    main('policy gradient', 'gate')

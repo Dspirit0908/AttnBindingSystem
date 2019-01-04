@@ -29,6 +29,8 @@ class Args(object):
         self.num_layers = 1
         self.teacher_forcing_ratio = 0.5
         self.embed_matrix = None
+        self.model = 'baseline'
+        self.m = 10
 
 
 if __name__ == '__main__':

@@ -4,6 +4,7 @@ import sys
 import torch
 import logging
 from utils import sequence_mask
+import torch.nn.functional as F
 from torch.distributions import Categorical
 
 logger = logging.getLogger('binding')
@@ -25,26 +26,32 @@ class Policy:
         mask = sequence_mask(lengths, max_len).to(device=self.args.device)
         actions.data.masked_fill_(1 - mask, -100)
         log_probs.data.masked_fill_(1 - mask, 0.0)
-        # compute rewards
+        # compute rewards; (batch_size)
         rewards = self.compute_rewards(actions, sql_labels, mode='rewards')
         return torch.sum(log_probs, dim=1), rewards
 
     # todo: sample m actions
     def select_m_actions(self, probs, lengths, sql_labels):
         batch_size = probs.size(0)
-        # notice the max_len
         max_len = probs.size(1)
-        actions, log_probs = torch.LongTensor(batch_size, max_len).to(device=self.args.device), torch.FloatTensor(batch_size, max_len).to(device=self.args.device)
         probs = probs.transpose(0, 1).contiguous()
-        for ti in range(max_len):
-            actions[:, ti], log_probs[:, ti] = self.select_action_step(probs[ti])
-        # mask
-        mask = sequence_mask(lengths, max_len).to(device=self.args.device)
-        actions.data.masked_fill_(1 - mask, -100)
-        log_probs.data.masked_fill_(1 - mask, 0.0)
-        # compute rewards
-        rewards = self.compute_rewards(actions, sql_labels, mode='rewards')
-        return torch.sum(log_probs, dim=1), rewards
+        if self.args.model == 'gate':
+            probs = F.softmax(probs, dim=-1)
+        m_log_probs, m_rewards = torch.FloatTensor(batch_size, self.args.m).to(device=self.args.device), torch.FloatTensor(batch_size, self.args.m).to(device=self.args.device)
+        for index in range(self.args.m):
+            # notice the max_len
+            actions, log_probs = torch.LongTensor(batch_size, max_len).to(device=self.args.device), torch.FloatTensor(batch_size, max_len).to(device=self.args.device)
+            for ti in range(max_len):
+                actions[:, ti], log_probs[:, ti] = self.select_action_step(probs[ti])
+            # mask
+            mask = sequence_mask(lengths, max_len).to(device=self.args.device)
+            actions.data.masked_fill_(1 - mask, -100)
+            log_probs.data.masked_fill_(1 - mask, 0.0)
+            # compute rewards
+            rewards = self.compute_rewards(actions, sql_labels, mode='rewards')
+            m_log_probs[:, index], m_rewards[:, index] = torch.sum(log_probs, dim=1), rewards
+        m_rewards -= m_rewards.mean(dim=-1).view(batch_size, 1)
+        return m_log_probs, m_rewards
 
     def select_action_step(self, probs_step):
         m = Categorical(probs_step)
@@ -89,14 +96,19 @@ class Policy:
         # three rules
         reward = -1.0
         sql_sel_col = int(sel_col.data.cpu().numpy())
-        action_conds_cols = set(action_cols)
-        if sql_sel_col in action_conds_cols:
+        action_cols_set = set(action_cols)
+        if sql_sel_col in action_cols:
             # need remove sel_col
-            action_conds_cols.remove(sql_sel_col)
+            action_cols_set.remove(sql_sel_col)
             # set(conds_cols.data.cpu().numpy()) include -100, but no affect for the result of issubset
-            if action_conds_cols.issubset(set(conds_cols.data.cpu().numpy())):
-                if action_vals == sql_values:
+            if action_cols_set.issubset(set(conds_cols.data.cpu().numpy())):
+                if set(action_vals) == set(sql_values):
                     reward = 1.0
+        # print(action)
+        # print(action_cols, sql_sel_col, conds_cols)
+        # print(set(action_vals), set(sql_values))
+        # print(reward)
+        # print('######')
         return reward
     
     # reward 1 or 0, for test to compute acc
@@ -115,18 +127,19 @@ class Policy:
         # three rules
         reward = 0
         sql_sel_col = int(sel_col.data.cpu().numpy())
-        action_conds_cols = set(action_cols)
-        if sql_sel_col in action_conds_cols:
-            action_conds_cols.remove(sql_sel_col)
-            # if action_conds_cols.issubset(set(conds_cols.data.cpu().numpy())):
-            if action_conds_cols == set(conds_cols.data.cpu().numpy()):
-                if action_vals == sql_values:
+        action_cols_set = set(action_cols)
+        if sql_sel_col in action_cols:
+            # need remove sel_col
+            action_cols_set.remove(sql_sel_col)
+            # set(conds_cols.data.cpu().numpy()) include -100, but no affect for the result of issubset
+            if action_cols_set.issubset(set(conds_cols.data.cpu().numpy())):
+                if set(action_vals) == set(sql_values):
                     reward = 1.0
-        print(action)
-        print(action_cols, sel_col, conds_cols)
-        print(action_vals, sql_values)
-        print(reward)
-        print('######')
+        # print(action)
+        # print(action_cols, sql_sel_col, conds_cols)
+        # print(set(action_vals), set(sql_values))
+        # print(reward)
+        # print('######')
         return reward
 
 

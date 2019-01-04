@@ -100,4 +100,5 @@ if __name__ == '__main__':
     word2index, index2word = build_all_vocab(init_vocab={UNK_WORD: 0})
     args.vocab, args.vocab_size = word2index, len(word2index)
     print(args.vocab_size)
+    args.model = 'baseline'
     train_dataset = BindingDataset('train', args=args)

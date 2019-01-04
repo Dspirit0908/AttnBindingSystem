@@ -43,10 +43,10 @@ def train(train_loader, dev_loader, args, model):
             optimizer.zero_grad()
             # feed forward
             logit = model(inputs)
-            loss = criterion(logit.permute(0, 2, 1).contiguous(), label)
-            # loss = 0
-            # for ti in range(logit.size()[1]):
-            #     loss += criterion(logit[:, ti], label[:, ti])
+            # loss = criterion(logit.permute(0, 2, 1).contiguous(), label)
+            loss = 0
+            for ti in range(logit.size()[1]):
+                loss += criterion(logit[:, ti], label[:, ti])
             loss.backward()
             optimizer.step()
             # sys.exit()
@@ -54,7 +54,7 @@ def train(train_loader, dev_loader, args, model):
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
         if epoch % args.log_test_interval == 0:
             correct, total = eval(dev_loader, args, model, epoch=epoch, s_time=s_time)
-            if correct > best_correct and correct / total > 0.6:
+            if correct > best_correct and correct / total > 0.45:
                 model_path = './res/' + args.model + '/' + str(correct) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time()))
                 torch.save(model, model_path)
                 logger.info('save model: {}'.format(model_path))
@@ -119,9 +119,13 @@ def train_rl(train_loader, dev_loader, args, model):
             # feed forward
             logit = model(inputs)
             tokenize_len = inputs[0][1]
-            logprob, reward = policy.select_action(logit, tokenize_len, sql_labels)
-            loss = torch.sum(-logprob.mul(reward))
+            m_log_probs, m_rewards = policy.select_m_actions(logit, tokenize_len, sql_labels)
+            loss = torch.sum(-m_log_probs.mul(m_rewards))
             # loss /= logit.size(0)
+            logger.info('reward_mean')
+            logger.info(m_rewards.mean())
+            logger.info('loss_mean')
+            logger.info(loss / logit.size(0))
             loss.backward()
             optimizer.step()
         if epoch % args.log_trian_interval == 0:
