@@ -45,6 +45,8 @@ class Gate(nn.Module):
         self.gate = nn.Linear(6 * self.args.hidden_size, 3)
         # col pointer network
         self.col_pointer_network = GlobalAttention(args=self.args, dim=2 * self.args.hidden_size, attn_type="mlp")
+        # cell pointer network
+        self.cell_pointer_network = GlobalAttention(args=self.args, dim=2 * self.args.hidden_size, attn_type="mlp")
 
     def forward(self, inputs):
         # unpack inputs to data
@@ -70,6 +72,7 @@ class Gate(nn.Module):
         # encode cells
         cell_embed = self.token_embedding(cells_split).transpose(0,1).contiguous()
         cell_out, cell_hidden = self.table_encoder(self.cell_lstm, cell_embed, cells_split_len, cells_split_marker, hidden=None, total_length=self.args.cells_token_max_len)
+
         # concat token_out and hidden, todo: more layers -> modify fix_hidden
         col_contex, cell_contex = fix_hidden(col_hidden[0]).expand(self.args.tokenize_max_len, batch_size, 2 * self.args.hidden_size), fix_hidden(cell_hidden[0]).expand(self.args.tokenize_max_len, batch_size, 2 * self.args.hidden_size)
         # (tokenize_max_len, batch_size, 6 * hidden_size)
@@ -83,5 +86,24 @@ class Gate(nn.Module):
         pointer_align_scores = torch.cat([gate_output[:, :, 0].unsqueeze(-1), gate_col, gate_output[:, :, 2].unsqueeze(-1)], dim=-1)
         logger.debug('pointer_align_scores')
         logger.debug(pointer_align_scores)
+
+        # col_attn_h, col_align_score = self.col_pointer_network(input=token_out.transpose(0, 1).contiguous(),
+        #                                                context=col_out.transpose(0, 1).contiguous(),
+        #                                                context_lengths=columns_split_marker_len - 1,
+        #                                                context_max_len=self.args.columns_split_marker_max_len - 1)
+        # cell_attn_h, cell_align_score = self.cell_pointer_network(input=token_out.transpose(0, 1).contiguous(),
+        #                                                        context=cell_out.transpose(0, 1).contiguous(),
+        #                                                        context_lengths=cells_split_marker_len - 1,
+        #                                                        context_max_len=self.args.cells_split_marker_max_len - 1)
+        # # (tokenize_max_len, batch_size, 6 * hidden_size)
+        # gate_input = torch.cat([token_out, col_attn_h.transpose(0, 1).contiguous(), cell_attn_h.transpose(0, 1).contiguous()], -1)
+        # # (batch_size, tokenize_max_len, 3)
+        # gate_output = self.gate(gate_input).transpose(0, 1).contiguous()
+        # # gate_col; (batch_size, tokenize_max_len, columns_split_marker_max_len - 1)
+        # gate_col = gate_output[:, :, 1].unsqueeze(-1).expand(col_align_score.size()) * col_align_score
+        # pointer_align_scores = torch.cat([gate_output[:, :, 0].unsqueeze(-1), gate_col, gate_output[:, :, 2].unsqueeze(-1)], dim=-1)
+        # logger.debug('pointer_align_scores')
+        # logger.debug(pointer_align_scores)
+
         # (batch_size, tgt_len, src_len or class_num)
         return pointer_align_scores

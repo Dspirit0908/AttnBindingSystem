@@ -1,5 +1,6 @@
 # coding: utf-8
 
+import os
 import torch
 
 data_path = './data/'
@@ -19,7 +20,7 @@ class Args(object):
         self.log_trian_interval = 10
         self.log_test_interval = 1
         self.dropout_p = 0.1
-        self.load_w2v = False
+        self.load_w2v = True
         self.only_label = False
         self.shuffle = True
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,5 +35,9 @@ class Args(object):
 
 
 if __name__ == '__main__':
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+    print(torch.cuda.is_available())
+    print(torch.cuda.device_count())
+    print(torch.backends.cudnn.version())
     args = Args()
-    print(args.cuda)
+    print(args.device, args.cuda)

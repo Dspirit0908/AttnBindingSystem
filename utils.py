@@ -10,7 +10,7 @@ from torch import nn
 from functools import reduce
 from gensim.models import KeyedVectors
 from stanza.nlp.corenlp import CoreNLPClient
-from config import wikisql_path, preprocess_path, word_embedding_path
+from config import data_path, wikisql_path, preprocess_path, word_embedding_path
 
 client = None
 UNK_WORD = '<unk>'
@@ -467,8 +467,48 @@ def count_of_diff(l1, l2):
     return count_of_diff, wrong_indexs
 
 
-def compare_sql():
-    pass
+def translate(the_list, the_dict, sep=' '):
+    s = ''
+    for item in the_list:
+        if item in the_dict:
+            s += str(the_dict[item]) + sep
+        else:
+            s += str('Not in Dict') + sep
+    return s
+
+
+def translate_m_lists(m_lists, the_dict, sep=' '):
+    res = []
+    for s_list in m_lists:
+        res.append(translate(s_list, the_dict, sep))
+    return res
+
+
+def add_abstraction(mode, res, args):
+    typesql_path = data_path + 'typesql/' + mode + '_tok.jsonl'
+    typesql_table_path = data_path + 'typesql/' + mode + '_tok.tables.jsonl'
+    new_typesql_path = data_path + mode + '_tok.jsonl'
+    table_infos = read_json(typesql_table_path, key='id')
+    with open(typesql_path) as f:
+        with open(new_typesql_path, 'w') as out_f:
+            for line in f:
+                info = json.loads(line.strip())
+                key = info['question'].lower().replace(' ', '')
+                value = res.get(key, [])
+                question_len = len(info['question_tok'])
+                info['abstraction'] = [['te8r2ed'] for _ in range(question_len)]
+                # check tokenize
+                if question_len == len(value):
+                    the_table_info = table_infos[info['table_id']]
+                    the_column_info = the_table_info['header_tok']
+                    for i, v in enumerate(value):
+                        if v == 0:
+                            continue
+                        elif v > 0 and v < args.columns_split_marker_max_len:
+                            info['abstraction'][i] = the_column_info[v - 1]
+                        elif v == args.columns_split_marker_max_len:
+                            info['abstraction'][i] = ['value']
+                out_f.write(json.dumps(info) + '\n')
 
 
 if __name__ == '__main__':

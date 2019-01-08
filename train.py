@@ -11,7 +11,7 @@ import numpy as np
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torch import nn
-from utils import count_of_diff
+from utils import count_of_diff, translate_m_lists
 from models.policy_grad import Policy
 from sklearn.metrics import f1_score, classification_report, confusion_matrix, accuracy_score
 from sklearn.utils.multiclass import unique_labels
@@ -27,7 +27,7 @@ def train(train_loader, dev_loader, args, model):
         model.cuda()
     # todo: init_parameters and adjust learning rate
     # model.apply(init_parameters)
-    # large_lr_layers = list(map(id, model.fc.parameters()))
+    freeze_lr_layers = list(map(id, model.token_embedding.parameters()))
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()
     best_correct = 0
@@ -165,3 +165,23 @@ def eval_rl(data_loader, args, model, epoch):
     print('error_ratio')
     print(t_error_1 / total_batch, t_error_2 / total_batch, t_error_3 / total_batch, t_error_4 / total_batch)
     return rewards_epoch / total_batch
+
+
+def test(data_loader, args, model):
+    res = {}
+    policy = Policy(args=args)
+    for data in data_loader:
+        inputs, (label, _), sql_labels = data
+        for i in range(len(inputs)):
+            inputs[i][0] = Variable(inputs[i][0]).to(args.device)
+        # feed forward
+        logit = model(inputs)
+        tokenize_len = inputs[0][1]
+        actions, _, _, _, _, _ = policy.select_max_action(logit, tokenize_len, sql_labels)
+        questions = translate_m_lists(inputs[0][0].data.cpu().numpy(), the_dict=args.index2word, sep='')
+        for index, (question, action) in enumerate(zip(questions, actions.data.cpu().numpy())):
+            key = question.replace('<unk>', '')
+            action = list(action)
+            value = action[:tokenize_len[index]]
+            res[key] = value
+    return res
