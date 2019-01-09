@@ -167,7 +167,7 @@ def eval_rl(data_loader, args, model, epoch):
     return rewards_epoch / total_batch
 
 
-def test(data_loader, args, model):
+def test(data_loader, args, model, sep=''):
     res = {}
     policy = Policy(args=args)
     for data in data_loader:
@@ -178,10 +178,16 @@ def test(data_loader, args, model):
         logit = model(inputs)
         tokenize_len = inputs[0][1]
         actions, _, _, _, _, _ = policy.select_max_action(logit, tokenize_len, sql_labels)
-        questions = translate_m_lists(inputs[0][0].data.cpu().numpy(), the_dict=args.index2word, sep='')
+        questions = translate_m_lists(inputs[0][0].data.cpu().numpy(), the_dict=args.index2word, sep=sep)
+        batch_sel_col, batch_conds_cols, batch_conds_values = sql_labels
+        batch_sel_col, batch_conds_cols, batch_conds_values = batch_sel_col.data.cpu().numpy(), list(batch_conds_cols.data.cpu().numpy()), list(batch_conds_values.data.cpu().numpy())
         for index, (question, action) in enumerate(zip(questions, actions.data.cpu().numpy())):
             key = question.replace('<unk>', '')
             action = list(action)
             value = action[:tokenize_len[index]]
-            res[key] = value
+            if key not in res:
+                res[key] = {}
+            res[key]['pred'] = value
+            res[key]['label'] = list(label.data.cpu().numpy()[index])[:tokenize_len[index]]
+            res[key]['sql_labels'] = [batch_sel_col[index], list(batch_conds_cols[index]), list(batch_conds_values[index])]
     return res

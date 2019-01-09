@@ -42,7 +42,7 @@ class Gate(nn.Module):
         # table_encoder
         self.table_encoder = TableRNNEncoder(self.args)
         # gate
-        self.gate = nn.Linear(6 * self.args.hidden_size, 3)
+        self.gate = nn.Linear(4 * self.args.hidden_size, 3)
         # col pointer network
         self.col_pointer_network = GlobalAttention(args=self.args, dim=2 * self.args.hidden_size, attn_type="mlp")
         # cell pointer network
@@ -76,7 +76,7 @@ class Gate(nn.Module):
         # concat token_out and hidden, todo: more layers -> modify fix_hidden
         col_contex, cell_contex = fix_hidden(col_hidden[0]).expand(self.args.tokenize_max_len, batch_size, 2 * self.args.hidden_size), fix_hidden(cell_hidden[0]).expand(self.args.tokenize_max_len, batch_size, 2 * self.args.hidden_size)
         # (tokenize_max_len, batch_size, 6 * hidden_size)
-        gate_input = torch.cat([token_out, col_contex, cell_contex], -1)
+        gate_input = torch.cat([token_out, col_contex], -1)
         # (batch_size, tokenize_max_len, 3)
         gate_output = self.gate(gate_input).transpose(0, 1).contiguous()
         # pointer_network; _, (batch_size, tokenize_max_len, columns_split_marker_max_len - 1)

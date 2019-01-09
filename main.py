@@ -1,6 +1,7 @@
 # coding: utf-8
 
 import os
+import json
 import torch
 import logging
 import functools
@@ -42,6 +43,8 @@ def main(mode, model='baseline'):
         args.only_label = True
     elif mode == 'add feature':
         args.only_label = False
+    elif mode == 'write cases':
+        args.only_label = True
     # build train_dataloader
     train_dataset = BindingDataset('train', args=args, data_from_train=data_from_train)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
@@ -74,10 +77,32 @@ def main(mode, model='baseline'):
         model = torch.load('./res/policy_gradient/0.804922_22-16-28', map_location=lambda storage, loc: storage.cuda(0))
         res = test(test_dataloader, args, model)
         add_abstraction('test', res=res, args=args)
+    elif mode == 'write cases':
+        model = torch.load('./res/policy_gradient/0.804922_22-16-28', map_location=lambda storage, loc: storage.cuda(0))
+        res_pg = test(dev_dataloader, args, model, sep=' ')
+        model = torch.load('./res/gate/2705', map_location=lambda storage, loc: storage.cuda(0))
+        res_gate = test(dev_dataloader, args, model, sep=' ')
+        with open('cases.txt', 'w') as f:
+            for key in res_pg.keys():
+                # diff between gate and policy
+                if res_gate[key]['pred'] != res_pg[key]['pred']:
+                    if res_gate[key]['pred'] == res_gate[key]['label']:
+                        print(key)
+                        print('Pred_Gate:\t\t\t\t', end='')
+                        print(res_gate[key]['pred'])
+                        print('Pred_Policy_Gradient:\t', end='')
+                        print(res_pg[key]['pred'])
+                        print('Label:\t\t\t\t\t', end='')
+                        print(res_pg[key]['label'])
+                        print('SQL_Labels:\t\t\t\t', end='')
+                        print(res_pg[key]['sql_labels'])
+                        print()
+
 
 
 if __name__ == '__main__':
-    # main('train baseline', 'gate')
-    main('test model', 'gate')
+    main('train baseline', 'gate')
+    # main('test model', 'gate')
     # main('policy gradient', 'gate')
     # main('add feature', 'gate')
+    # main('write cases', 'gate')

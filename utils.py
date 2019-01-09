@@ -494,7 +494,9 @@ def add_abstraction(mode, res, args):
             for line in f:
                 info = json.loads(line.strip())
                 key = info['question'].lower().replace(' ', '')
-                value = res.get(key, [])
+                value = []
+                if key in res:
+                    value = res[key]['pred']
                 question_len = len(info['question_tok'])
                 info['abstraction'] = [['te8r2ed'] for _ in range(question_len)]
                 # check tokenize

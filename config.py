@@ -20,7 +20,7 @@ class Args(object):
         self.log_trian_interval = 10
         self.log_test_interval = 1
         self.dropout_p = 0.1
-        self.load_w2v = True
+        self.load_w2v = False
         self.only_label = False
         self.shuffle = True
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -41,3 +41,10 @@ if __name__ == '__main__':
     print(torch.backends.cudnn.version())
     args = Args()
     print(args.device, args.cuda)
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train_emb', action='store_true',
+                        help='Use trained word embedding for SQLNet.')
+    args = parser.parse_args()
+    print(args.train_emb)
