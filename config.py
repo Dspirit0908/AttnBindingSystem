@@ -19,19 +19,22 @@ class Args(object):
         self.batch_size = 256
         self.log_trian_interval = 10
         self.log_test_interval = 1
+        self.num_layers = 1
         self.dropout_p = 0.1
-        self.load_w2v = False
-        self.only_label = False
-        self.shuffle = True
+        self.teacher_forcing_ratio = 0.5
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.cuda = True if str(self.device) == 'cuda' else False
+        self.shuffle = True
+        self.only_label = False
+        self.load_w2v = False
+        self.embed_matrix = None
         self.word_dim = 100
         self.hidden_size = 100
-        self.num_layers = 1
-        self.teacher_forcing_ratio = 0.5
-        self.embed_matrix = None
-        self.model = 'baseline'
         self.m = 10
+        self.model = 'baseline'
+        self.cell_info = True
+        self.attn_concat = False
+        self.crf = False
 
 
 if __name__ == '__main__':

@@ -6,15 +6,16 @@ import json
 import torch
 import random
 import logging
+import datetime
 import operator
 import numpy as np
-from torch.autograd import Variable
-import torch.nn.functional as F
 from torch import nn
-from utils import count_of_diff, translate_m_lists
+import torch.nn.functional as F
+from torch.autograd import Variable
 from models.policy_grad import Policy
-from sklearn.metrics import f1_score, classification_report, confusion_matrix, accuracy_score
+from utils import count_of_diff, translate_m_lists
 from sklearn.utils.multiclass import unique_labels
+from sklearn.metrics import f1_score, classification_report, confusion_matrix, accuracy_score
 
 np.set_printoptions(threshold=np.inf)
 logger = logging.getLogger('binding')
@@ -55,7 +56,7 @@ def train(train_loader, dev_loader, args, model):
         if epoch % args.log_test_interval == 0:
             correct, total = eval(dev_loader, args, model, epoch=epoch, s_time=s_time)
             if correct > best_correct and correct / total > 0.45:
-                model_path = './res/' + args.model + '/' + str(correct) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time()))
+                model_path = './res/' + args.model + '/' + str(correct) + '_' + args.cell_info + '_' + args.attn_concat + '_' + args.crf + '_' + str(datetime.datetime.now().microsecond)
                 torch.save(model, model_path)
                 logger.info('save model: {}'.format(model_path))
             best_correct = max(best_correct, correct)
@@ -133,7 +134,7 @@ def train_rl(train_loader, dev_loader, args, model):
         if epoch % args.log_test_interval == 0:
             correct_ratio = eval_rl(dev_loader, args, model, epoch)
             if correct_ratio > best_correct_ratio and correct_ratio > 0.7:
-                model_path = './res/policy_gradient/' + str(correct_ratio.data.cpu().numpy()) + '_' + time.strftime('%H-%M-%S',time.localtime(time.time()))
+                model_path = './res/policy_gradient/' + str(correct_ratio.data.cpu().numpy()) + '_' + args.cell_info + '_' + args.attn_concat + '_' + args.crf + '_' + str(datetime.datetime.now().microsecond)
                 torch.save(model, model_path)
                 logger.info('save model: {}'.format(model_path))
             best_correct_ratio = max(best_correct_ratio, correct_ratio)
@@ -180,14 +181,13 @@ def test(data_loader, args, model, sep=''):
         actions, _, _, _, _, _ = policy.select_max_action(logit, tokenize_len, sql_labels)
         questions = translate_m_lists(inputs[0][0].data.cpu().numpy(), the_dict=args.index2word, sep=sep)
         batch_sel_col, batch_conds_cols, batch_conds_values = sql_labels
-        batch_sel_col, batch_conds_cols, batch_conds_values = batch_sel_col.data.cpu().numpy(), list(batch_conds_cols.data.cpu().numpy()), list(batch_conds_values.data.cpu().numpy())
-        for index, (question, action) in enumerate(zip(questions, actions.data.cpu().numpy())):
+        batch_sel_col, batch_conds_cols, batch_conds_values = batch_sel_col.data.cpu().numpy().tolist(), batch_conds_cols.data.cpu().numpy().tolist(), batch_conds_values.data.cpu().numpy().tolist()
+        for index, (question, action) in enumerate(zip(questions, actions.data.cpu().numpy().tolist())):
             key = question.replace('<unk>', '')
-            action = list(action)
             value = action[:tokenize_len[index]]
             if key not in res:
                 res[key] = {}
             res[key]['pred'] = value
-            res[key]['label'] = list(label.data.cpu().numpy()[index])[:tokenize_len[index]]
+            res[key]['label'] = label.data.cpu().numpy().tolist()[index][:tokenize_len[index]]
             res[key]['sql_labels'] = [batch_sel_col[index], list(batch_conds_cols[index]), list(batch_conds_values[index])]
     return res

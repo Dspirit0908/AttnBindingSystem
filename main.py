@@ -82,27 +82,21 @@ def main(mode, model='baseline'):
         res_pg = test(dev_dataloader, args, model, sep=' ')
         model = torch.load('./res/gate/2705', map_location=lambda storage, loc: storage.cuda(0))
         res_gate = test(dev_dataloader, args, model, sep=' ')
-        with open('cases.txt', 'w') as f:
+        with open('cases.txt', 'w', encoding='utf-8') as f:
             for key in res_pg.keys():
                 # diff between gate and policy
                 if res_gate[key]['pred'] != res_pg[key]['pred']:
                     if res_gate[key]['pred'] == res_gate[key]['label']:
-                        print(key)
-                        print('Pred_Gate:\t\t\t\t', end='')
-                        print(res_gate[key]['pred'])
-                        print('Pred_Policy_Gradient:\t', end='')
-                        print(res_pg[key]['pred'])
-                        print('Label:\t\t\t\t\t', end='')
-                        print(res_pg[key]['label'])
-                        print('SQL_Labels:\t\t\t\t', end='')
-                        print(res_pg[key]['sql_labels'])
-                        print()
-
+                        f.write(key + '\n')
+                        f.write('Pred_Gate:\t\t\t\t' + json.dumps(res_gate[key]['pred']) + '\n')
+                        f.write('Pred_Policy_Gradient:\t' + json.dumps(res_pg[key]['pred']) + '\n')
+                        f.write('Label:\t\t\t\t\t' + json.dumps(res_pg[key]['label']) + '\n')
+                        f.write('SQL_Labels:\t\t\t\t' + json.dumps(res_pg[key]['sql_labels']) + '\n' + '\n')
 
 
 if __name__ == '__main__':
-    main('train baseline', 'gate')
+    # main('train baseline', 'gate')
     # main('test model', 'gate')
     # main('policy gradient', 'gate')
     # main('add feature', 'gate')
-    # main('write cases', 'gate')
+    main('write cases', 'gate')

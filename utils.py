@@ -518,5 +518,5 @@ if __name__ == '__main__':
     mode_list = ['train', 'dev', 'test']
     table_id_set_list = []
     for index, mode in enumerate(mode_list):
-        load_data(get_preprocess_path(mode))
+        load_data(preprocess(mode))
     pass
