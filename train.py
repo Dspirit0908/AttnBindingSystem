@@ -13,6 +13,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from models.policy_grad import Policy
+from tensorboardX import SummaryWriter
 from utils import count_of_diff, translate_m_lists, sequence_mask
 from sklearn.utils.multiclass import unique_labels
 from sklearn.metrics import f1_score, classification_report, confusion_matrix, accuracy_score
@@ -24,12 +25,17 @@ logger = logging.getLogger('binding')
 def train(train_loader, dev_loader, args, model):
     s_time = time.time()
     print('start train... {}'.format(time.strftime('%H:%M:%S',time.localtime(time.time()))))
+    dev_writer = SummaryWriter(log_dir='./logs/' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond))
     if args.cuda:
         model.cuda()
     # todo: init_parameters and adjust learning rate
     # model.apply(init_parameters)
     freeze_lr_layers = list(map(id, model.token_embedding.parameters()))
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    normal_lr_layers = filter(lambda p: id(p) not in freeze_lr_layers, model.parameters())
+    if args.load_w2v:
+        optimizer = torch.optim.Adam([{'params': freeze_lr_layers, 'lr': 0}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()
     best_correct = 0
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-100)
@@ -56,8 +62,12 @@ def train(train_loader, dev_loader, args, model):
             # sys.exit()
         if epoch % args.log_trian_interval == 0:
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
+            model_path = './res/' + args.model + '/' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond) + str(epoch)
+            torch.save(model, model_path)
+            logger.info('save model: {}'.format(model_path))
         if epoch % args.log_test_interval == 0:
             correct, total = eval(dev_loader, args, model, epoch=epoch, s_time=s_time)
+            dev_writer.add_scalar('Correct_Ratio', correct / total, epoch)
             if correct > best_correct and correct / total > args.save_bar_pretrained:
                 model_path = './res/' + args.model + '/' + str(correct) + '_' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond)
                 torch.save(model, model_path)

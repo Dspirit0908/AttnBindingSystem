@@ -15,7 +15,7 @@ class Args(object):
         self.seed = 72
         self.lr = 0.001
         self.weight_decay = 0.001
-        self.epochs = 100
+        self.epochs = 200
         self.batch_size = 256
         self.log_trian_interval = 10
         self.log_test_interval = 1
@@ -30,12 +30,12 @@ class Args(object):
         self.shuffle = True
         self.only_label = False
         self.load_w2v = False
-        self.embed_matrix = None
         self.word_dim = 100
+        self.embed_matrix = None
         self.hidden_size = 100
         self.m = 10
         self.model = 'baseline'
-        self.cell_info = True
+        self.cell_info = False
         self.attn_concat = False
         self.crf = False
 

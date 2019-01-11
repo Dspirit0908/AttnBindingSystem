@@ -91,8 +91,8 @@ def main(mode, args):
 
 if __name__ == '__main__':
     # set environ, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
-    torch.cuda.set_device(1)
+    # os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+    torch.cuda.set_device(4)
     print(torch.cuda.device_count())
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')
@@ -101,10 +101,12 @@ if __name__ == '__main__':
     set_seed(args.seed)
     logger.info(args.device)
     args.model = 'gate'
+    args.load_w2v, args.word_dim = True, 300
+    args.cell_info = True
     args.attn_concat = True
     args.crf = True
     main('train baseline', args)
-    # main('test model', 'gate')
-    # main('policy gradient', 'gate')
-    # main('add feature', 'gate')
-    # main('write cases', 'gate')
+    # main('test model', args)
+    # main('policy gradient', args)
+    # main('add feature', args)
+    # main('write cases', args)

@@ -37,7 +37,7 @@ class BindingDataset(Dataset):
             if model == 'gate':
                 if pos == 0: return 0
                 if pos == 1: return 1 + suffix
-                if pos == 2: return 1 + self.columns_split_marker_max_len - 1
+                if pos == 2: return 1 + self.columns_split_marker_max_len - 1 + suffix if self.args.cell_info else 1 + self.columns_split_marker_max_len - 1
             elif model == 'baseline':
                 if pos == 0: return index
                 if pos == 1: return self.tokenize_max_len + suffix

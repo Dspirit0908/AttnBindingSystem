@@ -91,7 +91,7 @@ class Policy:
             action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
         elif self.args.model == 'gate':
             action_cols = [tag - 1 for tag in action.data.cpu().numpy() if tag > 0 and tag < self.args.columns_split_marker_max_len]
-            action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag == self.args.columns_split_marker_max_len]
+            action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.columns_split_marker_max_len]
         sql_values = []
         for value in conds_values.data.cpu().numpy():
             if value[0] != -100:
@@ -124,7 +124,7 @@ class Policy:
             action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1]
         elif self.args.model == 'gate':
             action_cols = [tag - 1 for tag in action.data.cpu().numpy() if tag > 0 and tag < self.args.columns_split_marker_max_len]
-            action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag == self.args.columns_split_marker_max_len]
+            action_vals = [index for index, tag in enumerate(action.data.cpu().numpy()) if tag >= self.args.columns_split_marker_max_len]
         sql_values = []
         for value in conds_values.data.cpu().numpy():
             if value[0] != -100:

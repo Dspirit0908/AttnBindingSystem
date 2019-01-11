@@ -53,7 +53,13 @@ class Gate(nn.Module):
         self.cell_pointer_network = GlobalAttention(args=self.args, dim=2 * self.args.hidden_size, attn_type="mlp")
         if self.args.crf:
             # todo: set num for baseline
-            self.crf = ConditionalRandomField(46)
+            if self.args.model == 'gate':
+                if self.args.cell_info:
+                    self.crf = ConditionalRandomField(53)
+                else:
+                    self.crf = ConditionalRandomField(46)
+            else:
+                raise NotImplementedError
 
     def forward(self, inputs):
         # unpack inputs to data
@@ -102,11 +108,21 @@ class Gate(nn.Module):
         if self.args.attn_concat:
             pass
         else:
-            # pointer_network; _, (batch_size, tokenize_max_len, columns_split_marker_max_len - 1)
-            col_contex, col_align_score = self.col_pointer_network(input=token_out.transpose(0, 1).contiguous(), context=col_out.transpose(0, 1).contiguous(), context_lengths=columns_split_marker_len - 1, context_max_len=self.args.columns_split_marker_max_len - 1)
+            col_contex, col_align_score = self.col_pointer_network(input=token_out.transpose(0, 1).contiguous(),
+                                                                   context=col_out.transpose(0, 1).contiguous(),
+                                                                   context_lengths=columns_split_marker_len - 1,
+                                                                   context_max_len=self.args.columns_split_marker_max_len - 1)
+            cell_contex, cell_align_score = self.cell_pointer_network(input=token_out.transpose(0, 1).contiguous(),
+                                                                      context=cell_out.transpose(0, 1).contiguous(),
+                                                                      context_lengths=cells_split_marker_len - 1,
+                                                                      context_max_len=self.args.cells_split_marker_max_len - 1)
         # gate_col; (batch_size, tokenize_max_len, columns_split_marker_max_len - 1)
-        gate_col = gate_output[:, :, 1].unsqueeze(-1).expand(col_align_score.size()) * col_align_score
-        pointer_align_scores = torch.cat([gate_output[:, :, 0].unsqueeze(-1), gate_col, gate_output[:, :, 2].unsqueeze(-1)], dim=-1)
+        gate_out_col = gate_output[:, :, 1].unsqueeze(-1).expand(col_align_score.size()) * col_align_score
+        gate_out_cell = gate_output[:, :, 2].unsqueeze(-1).expand(cell_align_score.size()) * cell_align_score
+        if self.args.cell_info:
+            pointer_align_scores = torch.cat([gate_output[:, :, 0].unsqueeze(-1), gate_out_col, gate_out_cell], dim=-1)
+        else:
+            pointer_align_scores = torch.cat([gate_output[:, :, 0].unsqueeze(-1), gate_out_col, gate_output[:, :, 2].unsqueeze(-1)], dim=-1)
         logger.debug('pointer_align_scores')
         logger.debug(pointer_align_scores)
         # _, _, (batch_size, tgt_len, src_len or class_num)
