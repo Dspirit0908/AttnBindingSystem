@@ -14,14 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 from utils import UNK_WORD, BOS_WORD, build_all_vocab, set_seed, load_word_embedding, add_abstraction
 
 
-def main(mode, model='baseline'):
-    # set environ, args, seed, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '7'
-    args = Args()
-    args.model = model
-    set_seed(args.seed)
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger('binding')
+def main(mode, args):
     # build vocab
     word2index, index2word = build_all_vocab(init_vocab={UNK_WORD: 0, BOS_WORD: 1})
     args.vocab, args.vocab_size, args.index2word = word2index, len(word2index), index2word
@@ -40,7 +33,7 @@ def main(mode, model='baseline'):
     elif mode == 'policy gradient':
         args.only_label = False
     elif mode == 'test model':
-        args.only_label = True
+        args.only_label = False
     elif mode == 'add feature':
         args.only_label = False
     elif mode == 'write cases':
@@ -64,6 +57,8 @@ def main(mode, model='baseline'):
             model = Baseline(args)
         elif args.model == 'gate':
             model = Gate(args)
+        else:
+            raise NotImplementedError
         train(train_dataloader, dev_dataloader, args=args, model=model)
     elif mode == 'policy gradient':
         model = torch.load('./res/' + args.model + '/2705', map_location=lambda storage, loc: storage.cuda(0))
@@ -95,8 +90,21 @@ def main(mode, model='baseline'):
 
 
 if __name__ == '__main__':
-    # main('train baseline', 'gate')
+    # set environ, loggging
+    os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+    torch.cuda.set_device(3)
+    print(torch.cuda.device_count())
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger('binding')
+    # set args
+    args = Args()
+    set_seed(args.seed)
+    logger.info(args.device)
+    args.model = 'gate'
+    args.attn_concat = True
+    args.crf = True
+    main('train baseline', args)
     # main('test model', 'gate')
     # main('policy gradient', 'gate')
     # main('add feature', 'gate')
-    main('write cases', 'gate')
+    # main('write cases', 'gate')

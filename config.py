@@ -24,6 +24,9 @@ class Args(object):
         self.teacher_forcing_ratio = 0.5
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.cuda = True if str(self.device) == 'cuda' else False
+        self.save_bar_pretrained = 0.45
+        self.save_bar_rl = 0.7
+        self.gate_class = 3
         self.shuffle = True
         self.only_label = False
         self.load_w2v = False
@@ -38,7 +41,7 @@ class Args(object):
 
 
 if __name__ == '__main__':
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '3'
     print(torch.cuda.is_available())
     print(torch.cuda.device_count())
     print(torch.backends.cudnn.version())

@@ -13,7 +13,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from models.policy_grad import Policy
-from utils import count_of_diff, translate_m_lists
+from utils import count_of_diff, translate_m_lists, sequence_mask
 from sklearn.utils.multiclass import unique_labels
 from sklearn.metrics import f1_score, classification_report, confusion_matrix, accuracy_score
 
@@ -42,12 +42,15 @@ def train(train_loader, dev_loader, args, model):
             # zero_grad
             model.zero_grad()
             optimizer.zero_grad()
-            # feed forward
-            logit = model(inputs)
-            # loss = criterion(logit.permute(0, 2, 1).contiguous(), label)
-            loss = 0
-            for ti in range(logit.size()[1]):
-                loss += criterion(logit[:, ti], label[:, ti])
+            if args.crf:
+                loss = model.forward_loss(inputs, label)
+            else:
+                # feed forward
+                _, _, logit = model(inputs)
+                # loss = criterion(logit.permute(0, 2, 1).contiguous(), label)
+                loss = 0
+                for ti in range(logit.size()[1]):
+                    loss += criterion(logit[:, ti], label[:, ti])
             loss.backward()
             optimizer.step()
             # sys.exit()
@@ -55,8 +58,8 @@ def train(train_loader, dev_loader, args, model):
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
         if epoch % args.log_test_interval == 0:
             correct, total = eval(dev_loader, args, model, epoch=epoch, s_time=s_time)
-            if correct > best_correct and correct / total > 0.45:
-                model_path = './res/' + args.model + '/' + str(correct) + '_' + args.cell_info + '_' + args.attn_concat + '_' + args.crf + '_' + str(datetime.datetime.now().microsecond)
+            if correct > best_correct and correct / total > args.save_bar_pretrained:
+                model_path = './res/' + args.model + '/' + str(correct) + '_' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond)
                 torch.save(model, model_path)
                 logger.info('save model: {}'.format(model_path))
             best_correct = max(best_correct, correct)
@@ -72,9 +75,12 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
         # feed forward
-        logit = model(inputs)
-        logit = torch.max(logit, 2)[1]
-        pred = logit.data.cpu().numpy()
+        _, _, logit = model(inputs)
+        if args.crf:
+            raise NotImplementedError
+        else:
+            logit = torch.max(logit, 2)[1]
+            pred = logit.data.cpu().numpy()
         true = label.data.cpu().numpy()
         for i in range(len(pred)):
             true_truncate, pred_truncate = [], []
@@ -118,7 +124,7 @@ def train_rl(train_loader, dev_loader, args, model):
             model.zero_grad()
             optimizer.zero_grad()
             # feed forward
-            logit = model(inputs)
+            _, _, logit = model(inputs)
             tokenize_len = inputs[0][1]
             m_log_probs, m_rewards = policy.select_m_actions(logit, tokenize_len, sql_labels)
             loss = torch.sum(-m_log_probs.mul(m_rewards))
@@ -133,8 +139,8 @@ def train_rl(train_loader, dev_loader, args, model):
             _ = eval_rl(train_loader, args, model, epoch)
         if epoch % args.log_test_interval == 0:
             correct_ratio = eval_rl(dev_loader, args, model, epoch)
-            if correct_ratio > best_correct_ratio and correct_ratio > 0.7:
-                model_path = './res/policy_gradient/' + str(correct_ratio.data.cpu().numpy()) + '_' + args.cell_info + '_' + args.attn_concat + '_' + args.crf + '_' + str(datetime.datetime.now().microsecond)
+            if correct_ratio > best_correct_ratio and correct_ratio > args.save_bar_rl:
+                model_path = './res/policy_gradient/' + str(correct_ratio.data.cpu().numpy()) + '_' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond)
                 torch.save(model, model_path)
                 logger.info('save model: {}'.format(model_path))
             best_correct_ratio = max(best_correct_ratio, correct_ratio)
@@ -150,7 +156,7 @@ def eval_rl(data_loader, args, model, epoch):
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
         # feed forward
-        logit = model(inputs)
+        _, _, logit = model(inputs)
         tokenize_len = inputs[0][1]
         actions, reward, b_error_1, b_error_2, b_error_3, b_error_4 = policy.select_max_action(logit, tokenize_len, sql_labels)
         rewards_epoch += reward.sum()
@@ -176,7 +182,7 @@ def test(data_loader, args, model, sep=''):
         for i in range(len(inputs)):
             inputs[i][0] = Variable(inputs[i][0]).to(args.device)
         # feed forward
-        logit = model(inputs)
+        _, _, logit = model(inputs)
         tokenize_len = inputs[0][1]
         actions, _, _, _, _, _ = policy.select_max_action(logit, tokenize_len, sql_labels)
         questions = translate_m_lists(inputs[0][0].data.cpu().numpy(), the_dict=args.index2word, sep=sep)

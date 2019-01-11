@@ -14,6 +14,7 @@ from models.modules.GlobalAttention import GlobalAttention
 from models.modules.PointerNet import PointerNetRNNDecoder
 from models.modules.PointerNetDecoderStep import Decoder
 from models.modules.Decoder import AttnDecoderRNN
+from allennlp.modules import ConditionalRandomField
 
 logger = logging.getLogger('binding')
 np.set_printoptions(threshold=np.inf)
@@ -43,13 +44,16 @@ class Gate(nn.Module):
         self.table_encoder = TableRNNEncoder(self.args)
         # gate
         if self.args.cell_info:
-            self.gate = nn.Linear(6 * self.args.hidden_size, 3)
+            self.gate = nn.Linear(6 * self.args.hidden_size, self.args.gate_class)
         else:
-            self.gate = nn.Linear(4 * self.args.hidden_size, 3)
+            self.gate = nn.Linear(4 * self.args.hidden_size, self.args.gate_class)
         # col pointer network
         self.col_pointer_network = GlobalAttention(args=self.args, dim=2 * self.args.hidden_size, attn_type="mlp")
         # cell pointer network
         self.cell_pointer_network = GlobalAttention(args=self.args, dim=2 * self.args.hidden_size, attn_type="mlp")
+        if self.args.crf:
+            # todo: set num for baseline
+            self.crf = ConditionalRandomField(46)
 
     def forward(self, inputs):
         # unpack inputs to data
@@ -84,6 +88,7 @@ class Gate(nn.Module):
                                                                       context=cell_out.transpose(0, 1).contiguous(),
                                                                       context_lengths=cells_split_marker_len - 1,
                                                                       context_max_len=self.args.cells_split_marker_max_len - 1)
+            col_contex, cell_contex = col_contex.transpose(0, 1).contiguous(), cell_contex.transpose(0, 1).contiguous()
         else:
             # concat token_out and hidden, todo: more layers -> modify fix_hidden
             col_contex, cell_contex = fix_hidden(col_hidden[0]).expand(self.args.tokenize_max_len, batch_size, 2 * self.args.hidden_size), fix_hidden(cell_hidden[0]).expand(self.args.tokenize_max_len, batch_size, 2 * self.args.hidden_size)
@@ -104,6 +109,15 @@ class Gate(nn.Module):
         pointer_align_scores = torch.cat([gate_output[:, :, 0].unsqueeze(-1), gate_col, gate_output[:, :, 2].unsqueeze(-1)], dim=-1)
         logger.debug('pointer_align_scores')
         logger.debug(pointer_align_scores)
+        # _, _, (batch_size, tgt_len, src_len or class_num)
+        return gate_output, col_align_score, pointer_align_scores
 
-        # (batch_size, tgt_len, src_len or class_num)
-        return pointer_align_scores
+    def forward_loss(self, inputs, labels):
+        gate_output, _, pointer_align_scores = self.forward(inputs)
+        tokenize_len = inputs[0][1]
+        mask = sequence_mask(tokenize_len, max_len=self.args.tokenize_max_len).to(self.args.device)
+        # (L_Q, B)
+        labels = labels
+        loss = -self.crf(pointer_align_scores, labels, mask=mask)
+        loss /= labels.size(1)
+        return loss
