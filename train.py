@@ -77,11 +77,14 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
         # feed forward
         _, _, logit = model(inputs)
         if args.crf:
-            raise NotImplementedError
+            tokenize_len = inputs[0][1]
+            mask = sequence_mask(tokenize_len, max_len=args.tokenize_max_len).to(args.device)
+            pred = model.crf.viterbi_tags(logit, mask)
+            pred = [p[0] for p in pred]
         else:
             logit = torch.max(logit, 2)[1]
-            pred = logit.data.cpu().numpy()
-        true = label.data.cpu().numpy()
+            pred = logit.data.cpu().numpy().tolist()
+        true = label.data.cpu().numpy().tolist()
         for i in range(len(pred)):
             true_truncate, pred_truncate = [], []
             for t, p in zip(true[i], pred[i]):

@@ -116,8 +116,6 @@ class Gate(nn.Module):
         gate_output, _, pointer_align_scores = self.forward(inputs)
         tokenize_len = inputs[0][1]
         mask = sequence_mask(tokenize_len, max_len=self.args.tokenize_max_len).to(self.args.device)
-        # (L_Q, B)
-        labels = labels
         loss = -self.crf(pointer_align_scores, labels, mask=mask)
         loss /= labels.size(1)
         return loss

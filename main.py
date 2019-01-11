@@ -91,8 +91,8 @@ def main(mode, args):
 
 if __name__ == '__main__':
     # set environ, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '3'
-    torch.cuda.set_device(3)
+    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+    torch.cuda.set_device(1)
     print(torch.cuda.device_count())
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')

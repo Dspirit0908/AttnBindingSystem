@@ -71,7 +71,12 @@ class BindingDataset(Dataset):
         self.cells_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_token_max_len), cells_split_len_list))).to(device)
         self.cells_split_marker_tensor = torch.LongTensor(pad(cells_split_marker_list, max_len=self.cells_split_marker_max_len, pad_token=self.cells_token_max_len - 1)).to(device)
         self.cells_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_split_marker_max_len), cells_split_marker_len_list))).to(device)
-        self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=-100)).to(device)
+        # can not pad -100 for crf
+        if args.crf:
+            pad_token = 0
+        else:
+            pad_token = -100
+        self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=pad_token)).to(device)
         self.gate_label_tensor = torch.LongTensor(pad(gate_label_list, max_len=self.tokenize_max_len, pad_token=-100)).to(device)
         # handle sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
         self.sql_sel_col_list = torch.LongTensor(sql_sel_col_list)
