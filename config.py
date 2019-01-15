@@ -18,7 +18,7 @@ class Args(object):
         self.lr = 0.001
         self.weight_decay = 0.001
         self.epochs = 200
-        self.batch_size = 256
+        self.batch_size = 32
         self.log_trian_interval = 10
         self.log_test_interval = 1
         self.num_layers = 1

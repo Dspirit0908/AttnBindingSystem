@@ -8,6 +8,7 @@ import functools
 from config import Args
 from train import train, eval, train_rl, eval_rl, test
 from models.gate import Gate
+from models.bert_gate import BertGate
 from models.baseline import Baseline
 from dataloader import BindingDataset
 from torch.utils.data import Dataset, DataLoader
@@ -56,9 +57,12 @@ def main(mode, args):
     # train
     if mode == 'train baseline':
         if args.model == 'baseline':
-            model = Baseline(args)
+            model = Baseline(args=args)
         elif args.model == 'gate':
-            model = Gate(args)
+            if args.bert_model is None:
+                model = Gate(args=args)
+            else:
+                model = BertGate(args=args)
         else:
             raise NotImplementedError
         train(train_dataloader, dev_dataloader, args=args, model=model)
@@ -97,8 +101,8 @@ def main(mode, args):
 
 if __name__ == '__main__':
     # set environ, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '3'
-    # torch.cuda.set_device(3)
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+    torch.cuda.set_device(0)
     print(torch.cuda.device_count())
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')
@@ -112,9 +116,10 @@ if __name__ == '__main__':
     args.cell_info = True
     args.attn_concat = True
     args.crf = True
-    # main('train baseline', args)
+    args.bert_model = None
+    main('train baseline', args)
     # main('test model', args)
     # main('policy gradient', args)
     # main('add feature', args)
     # main('write cases', args)
-    main('anonymous', args)
+    # main('anonymous', args)

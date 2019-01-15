@@ -7,6 +7,7 @@ import functools
 import numpy as np
 from config import Args
 from torch.utils.data import Dataset, DataLoader
+from pytorch_pretrained_bert import BertTokenizer, BertModel
 from utils import get_wikisql_tables_path, get_preprocess_path, UNK_WORD
 from utils import load_data, build_vocab, build_all_vocab, change2idx, pad, max_len_of_m_lists
 
@@ -21,7 +22,10 @@ class BindingDataset(Dataset):
         tokenize_list, tokenize_len_list, pos_tag_list, table_id_list,\
         (columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list),\
         (cells_split_list, cells_split_len_list, cells_split_marker_list, cells_split_marker_len_list),\
-        label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = load_data(data_path, only_label=self.args.only_label)
+        label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list,\
+        (bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list),\
+        (bert_columns_split_list, bert_columns_split_len_list, bert_columns_split_marker_list, bert_columns_split_marker_len_list),\
+        (bert_cells_split_list, bert_cells_split_len_list, bert_cells_split_marker_list, bert_cells_split_marker_len_list) = load_data(data_path, only_label=self.args.only_label)
         # get len
         self.len = len(tokenize_list)
         # the data that need use train's data for dev and test
@@ -83,6 +87,9 @@ class BindingDataset(Dataset):
         assert max_len_of_m_lists(sql_conds_cols_list) == max_len_of_m_lists(sql_conds_values_list)
         self.sql_conds_cols_list = torch.LongTensor(pad(sql_conds_cols_list, max_len=max_len_of_m_lists(sql_conds_cols_list), pad_token=-100))
         self.sql_conds_values_list = torch.LongTensor(pad(sql_conds_values_list, max_len=max_len_of_m_lists(sql_conds_values_list), pad_token=[-100, -100]))
+        if self.args.bert_model is not None:
+            tokenizer = BertTokenizer.from_pretrained(self.args.bert_model)
+            tokenizer.tokenize()
 
     def __getitem__(self, index):
         return (

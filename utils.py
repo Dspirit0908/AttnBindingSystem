@@ -11,7 +11,7 @@ from functools import reduce
 from gensim.models import KeyedVectors
 from stanza.nlp.corenlp import CoreNLPClient
 from pytorch_pretrained_bert import BertTokenizer, BertModel
-from config import data_path, wikisql_path, preprocess_path, word_embedding_path, anonymous_path, bert_path
+from config import Args, data_path, wikisql_path, preprocess_path, word_embedding_path, anonymous_path, bert_path
 
 client = None
 UNK_WORD = '<unk>'
@@ -148,7 +148,7 @@ def preprocess(mode, lower=True):
                 if len(info['tokenize']) == len(the_label_info):
                     try:
                         for index, label in enumerate(the_label_info):
-                            if info['tokenize'] == '?':
+                            if info['tokenize'][index] == '?':
                                 info['label'].append(UNK_WORD)
                                 continue
                             label_split = label.split('_')
@@ -192,8 +192,6 @@ def add_bert_preprocess(mode, bert_model, lower=True):
     preprocess_path, out_path = get_preprocess_path(mode), get_bert_path(mode)
     tokenizer = BertTokenizer.from_pretrained(bert_model)
     wordpiece_tokenizer = tokenizer.wordpiece_tokenizer
-    # bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list = [], [], [], []
-    # bert_columns_split, bert_columns_split_len, bert_columns_split_marker, bert_columns_split_marker_len = [], [], [], []
     with open(preprocess_path) as f, open(out_path, 'w') as out_f:
         for line in f:
             info = json.loads(line.strip())
@@ -204,11 +202,13 @@ def add_bert_preprocess(mode, bert_model, lower=True):
                 sen_tokenize_marker.append(marker + len(token_bert_tokenize))
                 marker = marker + len(token_bert_tokenize)
             info['bert_tokenize'], info['bert_tokenize_marker'] = sen_bert_tokenize, sen_tokenize_marker
+            info['bert_indexed_tokens'] = tokenizer.convert_tokens_to_ids(info['bert_tokenize'])
             info['bert_columns_split'], _, info['bert_columns_split_marker'], _ = get_split(table_info[info['table_id']]['header'], lower=lower, tokenizer=tokenizer)
+            info['bert_cells_split'], _, info['bert_cells_split_marker'], _ = get_split(info['cells'], lower=lower, tokenizer=tokenizer)
             out_f.write(json.dumps(info) + '\n')
 
 
-def load_data(path, vocab=False, only_label=False, bert_model=None):
+def load_data(path, vocab=False, only_label=False):
     print('loading {}'.format(path))
     tokenize_list, tokenize_len_list = [], []
     pos_tag_list = []
@@ -218,10 +218,10 @@ def load_data(path, vocab=False, only_label=False, bert_model=None):
     label_list = []
     # a list, list of list, list of list of list
     sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = [], [], []
-    if bert_model is not None:
-        tokenizer = BertTokenizer.from_pretrained(bert_model)
-        wordpiece_tokenizer = tokenizer.wordpiece_tokenizer
-        bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list = [], [], [], []
+    # bert:
+    bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list = [], [], [], []
+    bert_columns_split_list, bert_columns_split_len_list, bert_columns_split_marker_list, bert_columns_split_marker_len_list = [], [], [], []
+    bert_cells_split_list, bert_cells_split_len_list, bert_cells_split_marker_list, bert_cells_split_marker_len_list = [], [], [], []
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
@@ -251,23 +251,27 @@ def load_data(path, vocab=False, only_label=False, bert_model=None):
             cells_split_marker_list.append(info['cells_split_marker']), cells_split_marker_len_list.append(info['cells_split_marker_len'])
             label_list.append(label)
             sql_sel_col_list.append(info['sql']['sel']), sql_conds_cols_list.append(conds_cols), sql_conds_values_list.append(conds_values)
-            if bert_model is not None:
-                sen_bert_tokenize, sen_tokenize_marker = [], []
-                for token in tokenize:
-                    token_bert_tokenize = tokenizer.tokenize(token)
-                    sen_bert_tokenize.extend(token_bert_tokenize)
-                bert_tokenize_list.append(sen_bert_tokenize), bert_tokenize_len_list.append(len(sen_bert_tokenize))
+            # bert
+            bert_tokenize_list.append(info['bert_tokenize']), bert_tokenize_len_list.append(len(info['bert_tokenize'])),\
+            bert_tokenize_marker_list.append(info['bert_tokenize_marker']), bert_tokenize_marker_len_list.append(len(info['bert_tokenize_marker']))
+            bert_columns_split_list.append(info['bert_columns_split']), bert_columns_split_len_list.append(len(info['bert_columns_split'])),\
+            bert_columns_split_marker_list.append(info['bert_columns_split_marker']), bert_columns_split_marker_len_list.append(len(info['bert_columns_split_marker']))
+            bert_cells_split_list.append(info['bert_cells_split']), bert_cells_split_len_list.append(len(info['bert_cells_split'])),\
+            bert_cells_split_marker_list.append(info['bert_cells_split_marker']), bert_cells_split_marker_len_list.append(len(info['bert_cells_split_marker']))
     if vocab:
         return tokenize_list, columns_split_list
     else:
-        # check
-        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list)\
-               == len(columns_split_list) == len(cells_split_list) == len(label_list) == len(sql_sel_col_list)\
+        assert len(tokenize_list) == len(tokenize_len_list) == len(pos_tag_list) == len(table_id_list) \
+               == len(columns_split_list) == len(cells_split_list) == len(label_list) == len(sql_sel_col_list) \
                == len(sql_conds_cols_list) == len(sql_conds_values_list)
-        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list,\
-               (columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list),\
-               (cells_split_list, cells_split_len_list, cells_split_marker_list, cells_split_marker_len_list),\
-               label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
+        return tokenize_list, tokenize_len_list, pos_tag_list, table_id_list, \
+               (columns_split_list, columns_split_len_list, columns_split_marker_list,
+                columns_split_marker_len_list), \
+               (cells_split_list, cells_split_len_list, cells_split_marker_list, cells_split_marker_len_list), \
+               label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list,\
+               (bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list),\
+               (bert_columns_split_list, bert_columns_split_len_list, bert_columns_split_marker_list, bert_columns_split_marker_len_list),\
+               (bert_cells_split_list, bert_cells_split_len_list, bert_cells_split_marker_list, bert_cells_split_marker_len_list)
 
 
 def load_anonymous_data(path):
@@ -637,4 +641,7 @@ def anonymous(mode, res, args):
 
 
 if __name__ == '__main__':
-    add_bert_preprocess('dev', 'bert-base-uncased')
+    args = Args()
+    mode_list = ['train', 'dev', 'test']
+    for mode in mode_list:
+        add_bert_preprocess(mode, args.bert_model)
