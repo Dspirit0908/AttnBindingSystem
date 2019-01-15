@@ -10,7 +10,7 @@ from torch import nn
 from functools import reduce
 from gensim.models import KeyedVectors
 from stanza.nlp.corenlp import CoreNLPClient
-from config import data_path, wikisql_path, preprocess_path, word_embedding_path
+from config import data_path, wikisql_path, preprocess_path, word_embedding_path, anonymous_path
 
 client = None
 UNK_WORD = '<unk>'
@@ -41,6 +41,10 @@ def get_wikisql_tables_path(mode):
 
 def get_preprocess_path(mode):
     return preprocess_path + mode + '.jsonl'
+
+
+def get_anonymous_path(mode):
+    return anonymous_path + mode + '.jsonl'
 
 
 def get_annotate(sentence, lower=True):
@@ -245,6 +249,21 @@ def load_word_embedding(word_dim, vocab, max_vocab_size=None):
             # if w_count != 0:
             #     embed_matrix[i] /= w_count
     return embed_matrix
+
+
+def load_anonymous_data(path):
+    anony_ques, anony_ques_len = [], []
+    anony_query, anony_query_len = [], []
+    with open(path) as f:
+        for line in f:
+            info = json.loads(line.strip())
+            the_ques = [BOS_WORD] +info['anonymous_question'] + [EOS_WORD]
+            anony_ques.append(the_ques)
+            anony_ques_len.append(len(the_ques))
+            the_query = [BOS_WORD] + info['query_list'] + [EOS_WORD]
+            anony_query.append(the_query)
+            anony_query_len.append(len(the_query))
+    return anony_ques, anony_ques_len, anony_query, anony_query_len
 
 
 def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_freq=1):
@@ -510,6 +529,68 @@ def add_abstraction(mode, res, args):
                             info['abstraction'][i] = the_column_info[v - 1]
                         elif v == args.columns_split_marker_max_len:
                             info['abstraction'][i] = ['value']
+                out_f.write(json.dumps(info) + '\n')
+
+
+def get_query_list(sql, cells):
+    try:
+        # todo: add value's column by using table_infos
+        query_list = []
+        query_list.append('agg_' + str(sql['agg']))
+        query_list.append('col_' + str(sql['sel']))
+        query_list.append('where')
+        for i, cond in enumerate(sql['conds']):
+            if i == 0:
+                pass
+            else:
+                query_list.append('and')
+            query_list.append('col_' + str(cond[0]))
+            query_list.append('op_' + str(cond[1]))
+            query_list.append('val_' + str(cells.index(cond[2].lower())))
+        return query_list
+    except Exception:
+        return None
+
+
+def anonymous(mode, res, args):
+    # table_infos = read_json(get_wikisql_tables_path(mode), key='id')
+    out_path = './data/anonymous/' + mode + '.jsonl'
+    preprocess_path = get_preprocess_path(mode)
+    preprocess_infos = {}
+    with open(preprocess_path) as f:
+        with open(out_path, 'w') as out_f:
+            for line in f:
+                info = json.loads(line.strip())
+                key = info['question'].lower().replace(' ', '')
+                query_list = get_query_list(info['sql'], info['cells'])
+                if query_list is None:
+                    # skip the sentence. todo: handle this
+                    continue
+                else:
+                    info['query_list'] = query_list
+                    # info['query'] = ' '.join(query_list)
+                if key in res:
+                    pred = res[key]['pred']
+                else:
+                    # todo: check this
+                    continue
+                now_token = None
+                info['anonymous_question'] = []
+                for i, v in enumerate(pred):
+                    if v == 0:
+                        token = info['tokenize'][i]
+                        info['anonymous_question'].append(token)
+                        now_token = token
+                    elif v > 0 and v < args.columns_split_marker_max_len:
+                        token = 'col_' + str(v - 1)
+                        if token != now_token:
+                            info['anonymous_question'].append(token)
+                            now_token = token
+                    elif v >= args.columns_split_marker_max_len:
+                        token = 'val_' + str(v - args.columns_split_marker_max_len)
+                        if token != now_token:
+                            info['anonymous_question'].append(token)
+                            now_token = token
                 out_f.write(json.dumps(info) + '\n')
 
 

@@ -8,5 +8,6 @@ import random
 import datetime
 import numpy as np
 
-print(time.strftime('%H-%M-%S',time.localtime(time.time())))
-print(str(datetime.datetime.now().microsecond))
+x = torch.randn([2, 3])
+print(x)
+print(torch.softmax(x, dim=1))

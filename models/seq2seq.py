@@ -1,103 +1,112 @@
 # coding: utf-8
 
-import sys
+import math
 import torch
 import random
-import logging
-import numpy as np
 from torch import nn
 from torch.autograd import Variable
-from utils import BOS_WORD, runBiRNN, sequence_mask
-from models.modules.TableRNNEncoder import TableRNNEncoder
-from models.modules.GlobalAttention import GlobalAttention
-from sklearn.metrics import confusion_matrix
-from models.modules.PointerNet import PointerNetRNNDecoder
-from models.modules.PointerNetDecoderStep import Decoder
-from models.modules.Decoder import AttnDecoderRNN
-
-logger = logging.getLogger('binding')
-np.set_printoptions(threshold=np.inf)
-torch.set_printoptions(precision=None, threshold=None, edgeitems=None, linewidth=None, profile='full')
+import torch.nn.functional as F
 
 
-class Baseline(nn.Module):
-    def __init__(self, args):
-        super(Baseline, self).__init__()
-        # args
-        self.args = args
-        self.hidden_size = args.hidden_size
-        # embedding
-        self.token_embedding = nn.Embedding(args.vocab_size, args.word_dim)
-        if args.embed_matrix is not None:
-            self.token_embedding.weight = nn.Parameter(torch.FloatTensor(args.embed_matrix))
-        # pos_tag embedding
-        self.pos_tag_embedding = nn.Embedding(len(args.pos_tag_vocab), args.word_dim)
-        # token_lstm
-        self.token_lstm = nn.LSTM(args.word_dim, args.hidden_size, bidirectional=True, batch_first=False,
-                               num_layers=args.num_layers, dropout=args.dropout_p)
-        # table_encoder
-        self.table_encoder = TableRNNEncoder(self.args)
-        # decoder_input
-        self.decoder_input = Variable(torch.LongTensor([self.args.vocab[BOS_WORD]]).to(self.args.device))
+class Encoder(nn.Module):
+    def __init__(self, input_size, embed_size, hidden_size,
+                 n_layers=1, dropout=0.5):
+        super(Encoder, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.embed_size = embed_size
+        self.embed = nn.Embedding(input_size, embed_size)
+        self.gru = nn.GRU(embed_size, hidden_size, n_layers,
+                          dropout=dropout, bidirectional=True)
 
-    def forward(self, inputs):
-        # unpack inputs to data
-        tokenize, tokenize_len = inputs[0]  # _, (batch_size)
-        pos_tag = inputs[1][0]
-        columns_split, columns_split_len = inputs[2]
-        columns_split_marker, columns_split_marker_len = inputs[3]  # _, (batch_size)
-        cells_split, cells_split_len = inputs[4]
-        cells_split_marker, cells_split_marker_len = inputs[5]  # _, (batch_size)
-        batch_size = tokenize.size(0)
-        # encode token
-        token_embed = self.token_embedding(tokenize)
-        token_embed = token_embed.transpose(0, 1).contiguous()  # (tokenize_max_len, batch_size, word_dim)
-        # add pos_tag on token_embed
-        pos_tag_embed = self.pos_tag_embedding(pos_tag).transpose(0, 1).contiguous()  # (tokenize_max_len, batch_size, word_dim)
-        token_embed += pos_tag_embed
-        # unk_tensor
-        # unk_tensor = self.unk_tensor.unsqueeze(0).expand(batch_size, 1, -1).transpose(0, 1).contiguous()  # (1, batch_size, word_dim)
-        # run token lstm
-        token_out, token_hidden = runBiRNN(self.token_lstm, token_embed, tokenize_len, total_length=self.args.tokenize_max_len)  # (tokenize_max_len, batch_size, 2*hidden_size), _
-        # encode columns
-        col_embed = self.token_embedding(columns_split).transpose(0, 1).contiguous()  # (columns_token_max_len, batch_size, word_dim)
-        col_out, col_hidden = self.table_encoder(self.token_lstm, col_embed, columns_split_len, columns_split_marker, hidden=token_hidden, total_length=self.args.columns_token_max_len)  # (columns_split_marker_max_len - 1, batch_size, 2 * hidden_size)
-        # encode cells
-        cell_embed = self.token_embedding(cells_split).transpose(0,1).contiguous()
-        cell_out, cell_hidden = self.table_encoder(self.token_lstm, cell_embed, cells_split_len, cells_split_marker, hidden=col_hidden, total_length=self.args.cells_token_max_len)
-        memory_bank = torch.cat([token_out, col_out, cell_out], dim=0).transpose(0, 1).contiguous()
-        # decode one step
-        pointer_align_scores, _, _ = self.pointer_net_decoder(tgt=token_embed, src=memory_bank, hidden=col_hidden,
-                                                                tgt_lengths=tokenize_len,
-                                                                tgt_max_len=self.args.tokenize_max_len,
-                                                                src_lengths=None,
-                                                                src_max_len=None)
-        logger.debug('pointer_align_scores'), logger.debug(pointer_align_scores.size())
-        # (batch_size, tgt_len, src_len)
-        return pointer_align_scores
+    def forward(self, src, hidden=None):
+        embedded = self.embed(src)
+        outputs, hidden = self.gru(embedded, hidden)
+        # sum bidirectional outputs
+        outputs = (outputs[:, :, :self.hidden_size] +
+                   outputs[:, :, self.hidden_size:])
+        return outputs, hidden
 
-        # decode step by step
-        decoder_input = self.decoder_input.unsqueeze(0).expand(batch_size, 1, -1).transpose(0, 1).contiguous()  # (1, batch_size, 2 * self.args.hidden_size)
-        # decoder_input2 = token_out[0].unsqueeze(0)
-        # decoder_input = self.transform_in(torch.cat([decoder_input1, decoder_input2], dim=-1))
-        pointer_align_scores = torch.zeros(self.args.tokenize_max_len, batch_size, self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1 + self.args.cells_split_marker_max_len - 1).to(self.args.device)
-        gate_scores = torch.zeros(self.args.tokenize_max_len, batch_size, self.args.tokenize_max_len + self.args.columns_split_marker_max_len - 1).to(self.args.device)
-        # use_teacher_forcing = True if random.random() < self.args.teacher_forcing_ratio else False
-        for ti in range(self.args.tokenize_max_len):
-            pointer_align_score, output, hidden = self.pointer_net_decoder(tgt=decoder_input1, src=memory_bank, hidden=col_hidden,
-                                                                   src_lengths=None,
-                                                                   src_max_len=None)  # (batch_size, 1, tokenize_max_len + columns_split_marker_max_len), _
-            self.gate(output)
-            # (batch_size, 1)
-            pointer1 = torch.max(pointer_align_score, -1)[1]
-            # pointer2 = torch.LongTensor([ti + 1]).unsqueeze(0).expand(batch_size, 1).to(self.args.device)
-            # if use_teacher_forcing:
-            #     pointer = label[:, ti].unsqueeze(1)
-            batch_index = torch.LongTensor(range(batch_size)).contiguous().view(batch_size, 1)
-            decoder_input1 = memory_bank[batch_index, pointer1, :].transpose(0, 1).contiguous().detach()
-            # decoder_input2 = memory_bank[batch_index, pointer2, :].transpose(0, 1).contiguous().detach()
-            # decoder_input = self.transform_in(torch.cat([decoder_input1, decoder_input2], dim=-1))
-            pointer_align_scores[ti] = pointer_align_score.transpose(0, 1).contiguous()
 
-        # (batch_size, tgt_len, src_len)
-        return pointer_align_scores.transpose(0, 1).contiguous()
+class Attention(nn.Module):
+    def __init__(self, hidden_size):
+        super(Attention, self).__init__()
+        self.hidden_size = hidden_size
+        self.attn = nn.Linear(self.hidden_size * 2, hidden_size)
+        self.v = nn.Parameter(torch.rand(hidden_size))
+        stdv = 1. / math.sqrt(self.v.size(0))
+        self.v.data.uniform_(-stdv, stdv)
+
+    def forward(self, hidden, encoder_outputs):
+        timestep = encoder_outputs.size(0)
+        h = hidden.repeat(timestep, 1, 1).transpose(0, 1)
+        encoder_outputs = encoder_outputs.transpose(0, 1)  # [B*T*H]
+        attn_energies = self.score(h, encoder_outputs)
+        return torch.relu(attn_energies).unsqueeze(1)
+
+    def score(self, hidden, encoder_outputs):
+        # [B*T*2H]->[B*T*H]
+        energy = F.softmax(self.attn(torch.cat([hidden, encoder_outputs], 2)))
+        energy = energy.transpose(1, 2)  # [B*H*T]
+        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)  # [B*1*H]
+        energy = torch.bmm(v, energy)  # [B*1*T]
+        return energy.squeeze(1)  # [B*T]
+
+
+class Decoder(nn.Module):
+    def __init__(self, embed_size, hidden_size, output_size,
+                 n_layers=1, dropout=0.2):
+        super(Decoder, self).__init__()
+        self.embed_size = embed_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.n_layers = n_layers
+
+        self.embed = nn.Embedding(output_size, embed_size)
+        self.dropout = nn.Dropout(dropout, inplace=True)
+        self.attention = Attention(hidden_size)
+        self.gru = nn.GRU(hidden_size + embed_size, hidden_size,
+                          n_layers, dropout=dropout)
+        self.out = nn.Linear(hidden_size * 2, output_size)
+
+    def forward(self, input, last_hidden, encoder_outputs):
+        # Get the embedding of the current input word (last output word)
+        embedded = self.embed(input).unsqueeze(0)  # (1,B,N)
+        embedded = self.dropout(embedded)
+        # Calculate attention weights and apply to encoder outputs
+        attn_weights = self.attention(last_hidden[-1], encoder_outputs)
+        context = attn_weights.bmm(encoder_outputs.transpose(0, 1))  # (B,1,N)
+        context = context.transpose(0, 1)  # (1,B,N)
+        # Combine embedded input word and attended context, run through RNN
+        rnn_input = torch.cat([embedded, context], 2)
+        output, hidden = self.gru(rnn_input, last_hidden)
+        output = output.squeeze(0)  # (1,B,N) -> (B,N)
+        context = context.squeeze(0)
+        output = self.out(torch.cat([output, context], 1))
+        output = F.log_softmax(output, dim=1)
+        return output, hidden, attn_weights
+
+
+class Seq2Seq(nn.Module):
+    def __init__(self, encoder, decoder):
+        super(Seq2Seq, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, src, trg, teacher_forcing_ratio=0.5):
+        batch_size = src.size(1)
+        max_len = trg.size(0)
+        vocab_size = self.decoder.output_size
+        outputs = Variable(torch.zeros(max_len, batch_size, vocab_size)).cuda()
+
+        encoder_output, hidden = self.encoder(src)
+        hidden = hidden[:self.decoder.n_layers]
+        output = Variable(trg.data[0, :])  # sos
+        for t in range(1, max_len):
+            output, hidden, attn_weights = self.decoder(
+                    output, hidden, encoder_output)
+            outputs[t] = output
+            is_teacher = random.random() < teacher_forcing_ratio
+            top1 = output.data.max(1)[1]
+            output = Variable(trg.data[t] if is_teacher else top1).cuda()
+        return outputs

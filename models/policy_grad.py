@@ -83,7 +83,10 @@ class Policy:
                 b_error_2 += error_2
                 b_error_3 += error_3
                 b_error_4 += error_4
-        return rewards if mode == 'rewards' else b_error_1, b_error_2, b_error_3, b_error_4, rewards
+        if mode == 'rewards':
+            return rewards
+        else:
+            return b_error_1, b_error_2, b_error_3, b_error_4, rewards
 
     def compute_rewards_step(self, action, sel_col, conds_cols, conds_values):
         if self.args.model == 'baseline':

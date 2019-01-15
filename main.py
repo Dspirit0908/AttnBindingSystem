@@ -11,7 +11,7 @@ from models.gate import Gate
 from models.baseline import Baseline
 from dataloader import BindingDataset
 from torch.utils.data import Dataset, DataLoader
-from utils import UNK_WORD, BOS_WORD, build_all_vocab, set_seed, load_word_embedding, add_abstraction
+from utils import UNK_WORD, BOS_WORD, build_all_vocab, set_seed, load_word_embedding, add_abstraction, anonymous
 
 
 def main(mode, args):
@@ -33,11 +33,13 @@ def main(mode, args):
     elif mode == 'policy gradient':
         args.only_label = False
     elif mode == 'test model':
-        args.only_label = False
+        args.only_label = True
     elif mode == 'add feature':
         args.only_label = False
     elif mode == 'write cases':
         args.only_label = True
+    elif mode == 'anonymous':
+        args.only_label = False
     # build train_dataloader
     train_dataset = BindingDataset('train', args=args, data_from_train=data_from_train)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
@@ -61,11 +63,11 @@ def main(mode, args):
             raise NotImplementedError
         train(train_dataloader, dev_dataloader, args=args, model=model)
     elif mode == 'policy gradient':
-        model = torch.load('./res/' + args.model + '/2705', map_location=lambda storage, loc: storage.cuda(0))
+        model = torch.load('./res/' + args.model + '/2816_False_True_True_726425', map_location=lambda storage, loc: storage.cuda(0))
         train_rl(train_dataloader, dev_dataloader, args=args, model=model)
     elif mode == 'test model':
         # also need the correct 'model' for dataloader
-        model = torch.load('./res/gate/2705', map_location=lambda storage, loc: storage.cuda(0))
+        model = torch.load('./res/policy_gradient/0.819928_True_True_True_412532', map_location=lambda storage, loc: storage.cuda(0))
         eval(dev_dataloader, args, model, epoch=0)
         eval_rl(dev_dataloader, args, model, epoch=0)
     elif mode == 'add feature':
@@ -73,9 +75,9 @@ def main(mode, args):
         res = test(test_dataloader, args, model)
         add_abstraction('test', res=res, args=args)
     elif mode == 'write cases':
-        model = torch.load('./res/policy_gradient/0.804922_22-16-28', map_location=lambda storage, loc: storage.cuda(0))
+        model = torch.load('./res/policy_gradient/0.819928_True_True_True_412532', map_location=lambda storage, loc: storage.cuda(0))
         res_pg = test(dev_dataloader, args, model, sep=' ')
-        model = torch.load('./res/gate/2705', map_location=lambda storage, loc: storage.cuda(0))
+        model = torch.load('./res/gate/epoch100', map_location=lambda storage, loc: storage.cuda(0))
         res_gate = test(dev_dataloader, args, model, sep=' ')
         with open('cases.txt', 'w', encoding='utf-8') as f:
             for key in res_pg.keys():
@@ -87,12 +89,16 @@ def main(mode, args):
                         f.write('Pred_Policy_Gradient:\t' + json.dumps(res_pg[key]['pred']) + '\n')
                         f.write('Label:\t\t\t\t\t' + json.dumps(res_pg[key]['label']) + '\n')
                         f.write('SQL_Labels:\t\t\t\t' + json.dumps(res_pg[key]['sql_labels']) + '\n' + '\n')
+    elif mode == 'anonymous':
+        model = torch.load('./res/policy_gradient/0.819928_True_True_True_412532', map_location=lambda storage, loc: storage.cuda(0))
+        res = test(train_dataloader, args, model, sep='')
+        anonymous('train', res, args)
 
 
 if __name__ == '__main__':
     # set environ, loggging
-    # os.environ["CUDA_VISIBLE_DEVICES"] = '1'
-    torch.cuda.set_device(4)
+    os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+    # torch.cuda.set_device(3)
     print(torch.cuda.device_count())
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')
@@ -100,13 +106,15 @@ if __name__ == '__main__':
     args = Args()
     set_seed(args.seed)
     logger.info(args.device)
+    # set model
     args.model = 'gate'
-    args.load_w2v, args.word_dim = True, 300
+    # args.load_w2v, args.word_dim = True, 300
     args.cell_info = True
     args.attn_concat = True
     args.crf = True
-    main('train baseline', args)
+    # main('train baseline', args)
     # main('test model', args)
     # main('policy gradient', args)
     # main('add feature', args)
     # main('write cases', args)
+    main('anonymous', args)

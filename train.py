@@ -25,15 +25,17 @@ logger = logging.getLogger('binding')
 def train(train_loader, dev_loader, args, model):
     s_time = time.time()
     print('start train... {}'.format(time.strftime('%H:%M:%S',time.localtime(time.time()))))
-    dev_writer = SummaryWriter(log_dir='./logs/' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond))
+    log_dir = './logs/' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond)
+    logger.info(log_dir)
+    dev_writer = SummaryWriter(log_dir=log_dir)
     if args.cuda:
         model.cuda()
     # todo: init_parameters and adjust learning rate
     # model.apply(init_parameters)
-    freeze_lr_layers = list(map(id, model.token_embedding.parameters()))
-    normal_lr_layers = filter(lambda p: id(p) not in freeze_lr_layers, model.parameters())
+    freeze_lr_layers = set(map(id, model.token_embedding.parameters()))
+    normal_lr_layers = list(filter(lambda p: id(p) not in freeze_lr_layers, model.parameters()))
     if args.load_w2v:
-        optimizer = torch.optim.Adam([{'params': freeze_lr_layers, 'lr': 0}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
+        optimizer = torch.optim.Adam([{'params': model.token_embedding.parameters(), 'lr': 0}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     model.train()
@@ -62,7 +64,7 @@ def train(train_loader, dev_loader, args, model):
             # sys.exit()
         if epoch % args.log_trian_interval == 0:
             _, _ = eval(train_loader, args, model, epoch=epoch, s_time=s_time)
-            model_path = './res/' + args.model + '/' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond) + str(epoch)
+            model_path = './res/' + args.model + '/' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond) + '_' + str(epoch)
             torch.save(model, model_path)
             logger.info('save model: {}'.format(model_path))
         if epoch % args.log_test_interval == 0:
@@ -142,10 +144,10 @@ def train_rl(train_loader, dev_loader, args, model):
             m_log_probs, m_rewards = policy.select_m_actions(logit, tokenize_len, sql_labels)
             loss = torch.sum(-m_log_probs.mul(m_rewards))
             # loss /= logit.size(0)
-            logger.info('reward_mean')
-            logger.info(m_rewards.mean())
-            logger.info('loss_mean')
-            logger.info(loss / logit.size(0))
+            # logger.info('reward_mean')
+            # logger.info(m_rewards.mean())
+            # logger.info('loss_mean')
+            # logger.info(loss / logit.size(0))
             loss.backward()
             optimizer.step()
         if epoch % args.log_trian_interval == 0:

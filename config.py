@@ -6,6 +6,7 @@ import torch
 data_path = './data/'
 wikisql_path = data_path + 'wikisql/'
 preprocess_path = data_path + 'preprocess/'
+anonymous_path = data_path + 'anonymous/'
 word_embedding_path = data_path + 'glove.6B.300d.txt'
 
 
