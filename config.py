@@ -7,6 +7,7 @@ data_path = './data/'
 wikisql_path = data_path + 'wikisql/'
 preprocess_path = data_path + 'preprocess/'
 anonymous_path = data_path + 'anonymous/'
+bert_path = data_path + 'bert/'
 word_embedding_path = data_path + 'glove.6B.300d.txt'
 
 
@@ -36,6 +37,7 @@ class Args(object):
         self.hidden_size = 100
         self.m = 10
         self.model = 'baseline'
+        self.bert_model = 'bert-base-uncased'
         self.cell_info = False
         self.attn_concat = False
         self.crf = False

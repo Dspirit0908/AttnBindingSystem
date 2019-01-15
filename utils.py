@@ -10,11 +10,12 @@ from torch import nn
 from functools import reduce
 from gensim.models import KeyedVectors
 from stanza.nlp.corenlp import CoreNLPClient
-from config import data_path, wikisql_path, preprocess_path, word_embedding_path, anonymous_path
+from pytorch_pretrained_bert import BertTokenizer, BertModel
+from config import data_path, wikisql_path, preprocess_path, word_embedding_path, anonymous_path, bert_path
 
 client = None
 UNK_WORD = '<unk>'
-SPLIT_WORD = '<|>'
+SPLIT_WORD = '[SEP]'
 PAD_WORD = '<blank>'
 BOS_WORD = '<s>'
 EOS_WORD = '</s>'
@@ -47,6 +48,10 @@ def get_anonymous_path(mode):
     return anonymous_path + mode + '.jsonl'
 
 
+def get_bert_path(mode):
+    return bert_path + mode + '.jsonl'
+
+
 def get_annotate(sentence, lower=True):
     # notice return 4 infos
     # todo: handle [Salmonella spp.] -> ['salmonella', 'spp.', '.']
@@ -73,13 +78,16 @@ def get_ngram(s_list):
     return ngram
 
 
-def get_split(iter, lower):
+def get_split(iter, lower, tokenizer=None):
     """
     get split and split_marker.
     """
     if len(iter) == 0: return [], 0, [], 0
-    # if lower is False: [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
-    columns = list(map(lambda column: get_annotate(column, lower)[0], iter))
+    if tokenizer is None:
+        # if lower is False: [['Player'], ['No', '.'], ['Nationality'], ['Position'], ['Years', 'in', 'Toronto'], ['School', '/', 'Club', 'Team']]
+        columns = list(map(lambda column: get_annotate(column, lower)[0], iter))
+    else:
+        columns = list(map(lambda column: tokenizer.tokenize(column), iter))
     # ['<|>', 'Player', '<|>', 'No', '.', '<|>', 'Nationality', '<|>', 'Position', '<|>', 'Years', 'in', 'Toronto', '<|>', 'School', '/', 'Club', 'Team', '<|>']
     columns_split = [SPLIT_WORD] + list(reduce(lambda x, y: x + [SPLIT_WORD] + y, columns)) + [SPLIT_WORD]
     columns_split_len = len(columns_split)
@@ -140,6 +148,9 @@ def preprocess(mode, lower=True):
                 if len(info['tokenize']) == len(the_label_info):
                     try:
                         for index, label in enumerate(the_label_info):
+                            if info['tokenize'] == '?':
+                                info['label'].append(UNK_WORD)
+                                continue
                             label_split = label.split('_')
                             if label_split[0] in UNK_TERM:
                                 info['label'].append(UNK_WORD)
@@ -176,7 +187,28 @@ def preprocess(mode, lower=True):
             out_f.write(json.dumps(info) + '\n')
 
 
-def load_data(path, vocab=False, only_label=False):
+def add_bert_preprocess(mode, bert_model, lower=True):
+    table_info = read_json(get_wikisql_tables_path(mode), 'id')
+    preprocess_path, out_path = get_preprocess_path(mode), get_bert_path(mode)
+    tokenizer = BertTokenizer.from_pretrained(bert_model)
+    wordpiece_tokenizer = tokenizer.wordpiece_tokenizer
+    # bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list = [], [], [], []
+    # bert_columns_split, bert_columns_split_len, bert_columns_split_marker, bert_columns_split_marker_len = [], [], [], []
+    with open(preprocess_path) as f, open(out_path, 'w') as out_f:
+        for line in f:
+            info = json.loads(line.strip())
+            sen_bert_tokenize, sen_tokenize_marker, marker = [], [], -1
+            for token in info['original']:
+                token_bert_tokenize = tokenizer.tokenize(token)
+                sen_bert_tokenize.extend(token_bert_tokenize)
+                sen_tokenize_marker.append(marker + len(token_bert_tokenize))
+                marker = marker + len(token_bert_tokenize)
+            info['bert_tokenize'], info['bert_tokenize_marker'] = sen_bert_tokenize, sen_tokenize_marker
+            info['bert_columns_split'], _, info['bert_columns_split_marker'], _ = get_split(table_info[info['table_id']]['header'], lower=lower, tokenizer=tokenizer)
+            out_f.write(json.dumps(info) + '\n')
+
+
+def load_data(path, vocab=False, only_label=False, bert_model=None):
     print('loading {}'.format(path))
     tokenize_list, tokenize_len_list = [], []
     pos_tag_list = []
@@ -186,6 +218,10 @@ def load_data(path, vocab=False, only_label=False):
     label_list = []
     # a list, list of list, list of list of list
     sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list = [], [], []
+    if bert_model is not None:
+        tokenizer = BertTokenizer.from_pretrained(bert_model)
+        wordpiece_tokenizer = tokenizer.wordpiece_tokenizer
+        bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list = [], [], [], []
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
@@ -215,6 +251,12 @@ def load_data(path, vocab=False, only_label=False):
             cells_split_marker_list.append(info['cells_split_marker']), cells_split_marker_len_list.append(info['cells_split_marker_len'])
             label_list.append(label)
             sql_sel_col_list.append(info['sql']['sel']), sql_conds_cols_list.append(conds_cols), sql_conds_values_list.append(conds_values)
+            if bert_model is not None:
+                sen_bert_tokenize, sen_tokenize_marker = [], []
+                for token in tokenize:
+                    token_bert_tokenize = tokenizer.tokenize(token)
+                    sen_bert_tokenize.extend(token_bert_tokenize)
+                bert_tokenize_list.append(sen_bert_tokenize), bert_tokenize_len_list.append(len(sen_bert_tokenize))
     if vocab:
         return tokenize_list, columns_split_list
     else:
@@ -226,6 +268,21 @@ def load_data(path, vocab=False, only_label=False):
                (columns_split_list, columns_split_len_list, columns_split_marker_list, columns_split_marker_len_list),\
                (cells_split_list, cells_split_len_list, cells_split_marker_list, cells_split_marker_len_list),\
                label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
+
+
+def load_anonymous_data(path):
+    anony_ques, anony_ques_len = [], []
+    anony_query, anony_query_len = [], []
+    with open(path) as f:
+        for line in f:
+            info = json.loads(line.strip())
+            the_ques = [BOS_WORD] +info['anonymous_question'] + [EOS_WORD]
+            anony_ques.append(the_ques)
+            anony_ques_len.append(len(the_ques))
+            the_query = [BOS_WORD] + info['query_list'] + [EOS_WORD]
+            anony_query.append(the_query)
+            anony_query_len.append(len(the_query))
+            return anony_ques, anony_ques_len, anony_query, anony_query_len
 
 
 def load_word_embedding(word_dim, vocab, max_vocab_size=None):
@@ -249,21 +306,6 @@ def load_word_embedding(word_dim, vocab, max_vocab_size=None):
             # if w_count != 0:
             #     embed_matrix[i] /= w_count
     return embed_matrix
-
-
-def load_anonymous_data(path):
-    anony_ques, anony_ques_len = [], []
-    anony_query, anony_query_len = [], []
-    with open(path) as f:
-        for line in f:
-            info = json.loads(line.strip())
-            the_ques = [BOS_WORD] +info['anonymous_question'] + [EOS_WORD]
-            anony_ques.append(the_ques)
-            anony_ques_len.append(len(the_ques))
-            the_query = [BOS_WORD] + info['query_list'] + [EOS_WORD]
-            anony_query.append(the_query)
-            anony_query_len.append(len(the_query))
-    return anony_ques, anony_ques_len, anony_query, anony_query_len
 
 
 def build_vocab(m_lists, pre_func=None, init_vocab=None, sort=True, min_word_freq=1):
@@ -595,9 +637,4 @@ def anonymous(mode, res, args):
 
 
 if __name__ == '__main__':
-    # preprocess all
-    mode_list = ['train', 'dev', 'test']
-    table_id_set_list = []
-    for index, mode in enumerate(mode_list):
-        load_data(preprocess(mode))
-    pass
+    add_bert_preprocess('dev', 'bert-base-uncased')

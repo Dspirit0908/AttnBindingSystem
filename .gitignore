@@ -103,11 +103,10 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-# txt
-*.txt
-
 # data
+data/
 *.db
+*.txt
 *.json
 *.jsonl
 
