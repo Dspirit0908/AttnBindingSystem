@@ -55,9 +55,9 @@ class Gate(nn.Module):
             # todo: set num for baseline
             if self.args.model == 'gate':
                 if self.args.cell_info:
-                    self.crf = ConditionalRandomField(53)
+                    self.crf = ConditionalRandomField(1 + self.args.columns_split_marker_max_len - 1 + self.args.cells_split_marker_max_len - 1)
                 else:
-                    self.crf = ConditionalRandomField(46)
+                    self.crf = ConditionalRandomField(1 + self.args.columns_split_marker_max_len - 1 + 1)
             else:
                 raise NotImplementedError
 

@@ -21,12 +21,17 @@ def main(mode, args):
     args.vocab, args.vocab_size, args.index2word = word2index, len(word2index), index2word
     # get data_from_train from only_label = True, for same as train baseline
     args.only_label = True
-    train_dataset = BindingDataset('train', args=args)
+    train_dataset = BindingDataset('dev', args=args)
     data_from_train = (train_dataset.tokenize_max_len, train_dataset.columns_token_max_len,
                        train_dataset.columns_split_marker_max_len, train_dataset.cells_token_max_len,
-                       train_dataset.cells_split_marker_max_len, train_dataset.pos_tag_vocab)
+                       train_dataset.cells_split_marker_max_len, train_dataset.pos_tag_vocab,
+                       train_dataset.bert_tokenize_max_len, train_dataset.bert_tokenize_marker_max_len,
+                       train_dataset.bert_columns_split_max_len, train_dataset.bert_columns_split_marker_max_len,
+                       train_dataset.bert_cells_split_max_len, train_dataset.bert_cells_split_marker_max_len)
     args.tokenize_max_len, args.columns_token_max_len, args.columns_split_marker_max_len, \
-    args.cells_token_max_len, args.cells_split_marker_max_len, args.pos_tag_vocab = data_from_train
+    args.cells_token_max_len, args.cells_split_marker_max_len, args.pos_tag_vocab,\
+    args.bert_tokenize_max_len, args.bert_tokenize_marker_max_len, args.bert_columns_split_max_len, args.bert_columns_split_marker_max_len,\
+    args.bert_cells_split_max_len, args.bert_cells_split_marker_max_len = data_from_train
     logger.info('data_from_train'), logger.info(data_from_train)
     # set only_label
     if mode == 'train baseline':
@@ -42,15 +47,15 @@ def main(mode, args):
     elif mode == 'anonymous':
         args.only_label = False
     # build train_dataloader
-    train_dataset = BindingDataset('train', args=args, data_from_train=data_from_train)
+    train_dataset = BindingDataset('dev', args=args, data_from_train=data_from_train)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
     # build dev_dataloader
     args.shuffle = False
     dev_dataset = BindingDataset('dev', args=args, data_from_train=data_from_train)
     dev_dataloader = DataLoader(dataset=dev_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
     # build test_dataloader
-    test_dataset = BindingDataset('test', args=args, data_from_train=data_from_train)
-    test_dataloader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
+    # test_dataset = BindingDataset('test', args=args, data_from_train=data_from_train)
+    # test_dataloader = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
     # load word embedding
     if args.load_w2v:
         args.embed_matrix = load_word_embedding(args.word_dim, word2index)
@@ -76,8 +81,8 @@ def main(mode, args):
         eval_rl(dev_dataloader, args, model, epoch=0)
     elif mode == 'add feature':
         model = torch.load('./res/policy_gradient/0.804922_22-16-28', map_location=lambda storage, loc: storage.cuda(0))
-        res = test(test_dataloader, args, model)
-        add_abstraction('test', res=res, args=args)
+        res = test(dev_dataloader, args, model)
+        add_abstraction('dev', res=res, args=args)
     elif mode == 'write cases':
         model = torch.load('./res/policy_gradient/0.819928_True_True_True_412532', map_location=lambda storage, loc: storage.cuda(0))
         res_pg = test(dev_dataloader, args, model, sep=' ')
@@ -101,8 +106,8 @@ def main(mode, args):
 
 if __name__ == '__main__':
     # set environ, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-    torch.cuda.set_device(0)
+    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+    torch.cuda.set_device(1)
     print(torch.cuda.device_count())
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')
@@ -113,10 +118,10 @@ if __name__ == '__main__':
     # set model
     args.model = 'gate'
     # args.load_w2v, args.word_dim = True, 300
-    args.cell_info = True
+    args.cell_info = False
     args.attn_concat = True
     args.crf = True
-    args.bert_model = None
+    # args.bert_model = None
     main('train baseline', args)
     # main('test model', args)
     # main('policy gradient', args)

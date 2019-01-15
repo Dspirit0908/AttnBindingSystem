@@ -32,21 +32,23 @@ def train(train_loader, dev_loader, args, model):
         model.cuda()
     # todo: init_parameters and adjust learning rate
     # model.apply(init_parameters)
-    freeze_lr_layers = set(map(id, model.token_embedding.parameters()))
-    normal_lr_layers = list(filter(lambda p: id(p) not in freeze_lr_layers, model.parameters()))
     if args.load_w2v:
+        freeze_lr_layers = set(map(id, model.token_embedding.parameters()))
+        normal_lr_layers = list(filter(lambda p: id(p) not in freeze_lr_layers, model.parameters()))
         optimizer = torch.optim.Adam([{'params': model.token_embedding.parameters(), 'lr': 0}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        if args.bert_model is None:
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        else:
+            small_lr_layers = set(map(id, model.bert_model.parameters()))
+            normal_lr_layers = list(filter(lambda p: id(p) not in small_lr_layers, model.parameters()))
+            optimizer = torch.optim.Adam([{'params': model.bert_model.parameters(), 'lr': 1e-5}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
     model.train()
     best_correct = 0
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-100)
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
             inputs, (label, _), _ = data
-            label = Variable(label).to(args.device)
-            for i in range(len(inputs)):
-                inputs[i][0] = Variable(inputs[i][0]).to(args.device)
             # zero_grad
             model.zero_grad()
             optimizer.zero_grad()
@@ -83,9 +85,6 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
     correct, total = 0, 0
     for data in data_loader:
         inputs, (label, _), _ = data
-        label = Variable(label).to(args.device)
-        for i in range(len(inputs)):
-            inputs[i][0] = Variable(inputs[i][0]).to(args.device)
         # feed forward
         _, _, logit = model(inputs)
         if args.crf:
@@ -133,8 +132,6 @@ def train_rl(train_loader, dev_loader, args, model):
         for data in train_loader:
             # unpack data
             inputs, (label, _), sql_labels = data
-            for i in range(len(inputs)):
-                inputs[i][0] = Variable(inputs[i][0]).to(args.device)
             # zero_grad
             model.zero_grad()
             optimizer.zero_grad()
@@ -168,8 +165,6 @@ def eval_rl(data_loader, args, model, epoch):
     t_error_1, t_error_2, t_error_3, t_error_4 = 0, 0, 0, 0
     for data in data_loader:
         inputs, (label, _), sql_labels = data
-        for i in range(len(inputs)):
-            inputs[i][0] = Variable(inputs[i][0]).to(args.device)
         # feed forward
         _, _, logit = model(inputs)
         tokenize_len = inputs[0][1]
@@ -194,8 +189,6 @@ def test(data_loader, args, model, sep=''):
     policy = Policy(args=args)
     for data in data_loader:
         inputs, (label, _), sql_labels = data
-        for i in range(len(inputs)):
-            inputs[i][0] = Variable(inputs[i][0]).to(args.device)
         # feed forward
         _, _, logit = model(inputs)
         tokenize_len = inputs[0][1]

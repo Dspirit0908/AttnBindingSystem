@@ -202,9 +202,9 @@ def add_bert_preprocess(mode, bert_model, lower=True):
                 sen_tokenize_marker.append(marker + len(token_bert_tokenize))
                 marker = marker + len(token_bert_tokenize)
             info['bert_tokenize'], info['bert_tokenize_marker'] = sen_bert_tokenize, sen_tokenize_marker
-            info['bert_indexed_tokens'] = tokenizer.convert_tokens_to_ids(info['bert_tokenize'])
             info['bert_columns_split'], _, info['bert_columns_split_marker'], _ = get_split(table_info[info['table_id']]['header'], lower=lower, tokenizer=tokenizer)
             info['bert_cells_split'], _, info['bert_cells_split_marker'], _ = get_split(info['cells'], lower=lower, tokenizer=tokenizer)
+            info['bert_indexed_tokenize'], info['bert_indexed_columns'], info['bert_indexed_cells'] = tokenizer.convert_tokens_to_ids(info['bert_tokenize']), tokenizer.convert_tokens_to_ids(info['bert_columns_split']), tokenizer.convert_tokens_to_ids(info['bert_cells_split'])
             out_f.write(json.dumps(info) + '\n')
 
 
@@ -222,6 +222,7 @@ def load_data(path, vocab=False, only_label=False):
     bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list = [], [], [], []
     bert_columns_split_list, bert_columns_split_len_list, bert_columns_split_marker_list, bert_columns_split_marker_len_list = [], [], [], []
     bert_cells_split_list, bert_cells_split_len_list, bert_cells_split_marker_list, bert_cells_split_marker_len_list = [], [], [], []
+    bert_indexed_tokenize_list, bert_indexed_columns_list, bert_indexed_cells_list = [], [], []
     with open(path) as f:
         for line in f:
             info = json.loads(line.strip())
@@ -258,6 +259,7 @@ def load_data(path, vocab=False, only_label=False):
             bert_columns_split_marker_list.append(info['bert_columns_split_marker']), bert_columns_split_marker_len_list.append(len(info['bert_columns_split_marker']))
             bert_cells_split_list.append(info['bert_cells_split']), bert_cells_split_len_list.append(len(info['bert_cells_split'])),\
             bert_cells_split_marker_list.append(info['bert_cells_split_marker']), bert_cells_split_marker_len_list.append(len(info['bert_cells_split_marker']))
+            bert_indexed_tokenize_list.append(info['bert_indexed_tokenize']), bert_indexed_columns_list.append(info['bert_indexed_columns']), bert_indexed_cells_list.append(info['bert_indexed_cells'])
     if vocab:
         return tokenize_list, columns_split_list
     else:
@@ -271,7 +273,8 @@ def load_data(path, vocab=False, only_label=False):
                label_list, sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list,\
                (bert_tokenize_list, bert_tokenize_len_list, bert_tokenize_marker_list, bert_tokenize_marker_len_list),\
                (bert_columns_split_list, bert_columns_split_len_list, bert_columns_split_marker_list, bert_columns_split_marker_len_list),\
-               (bert_cells_split_list, bert_cells_split_len_list, bert_cells_split_marker_list, bert_cells_split_marker_len_list)
+               (bert_cells_split_list, bert_cells_split_len_list, bert_cells_split_marker_list, bert_cells_split_marker_len_list),\
+               (bert_indexed_tokenize_list, bert_indexed_columns_list, bert_indexed_cells_list)
 
 
 def load_anonymous_data(path):
@@ -354,7 +357,7 @@ def build_all_vocab(init_vocab=None, min_word_freq=1):
     mode_list = ['train', 'dev', 'test']
     vocab = []
     for mode in mode_list:
-        tokenize_list, columns_split_list = load_vocab(get_preprocess_path(mode))
+        tokenize_list, columns_split_list = load_vocab(get_bert_path(mode))
         vocab.extend(tokenize_list)
         vocab.extend(columns_split_list)
     word2index, index2word = build_vocab(vocab, init_vocab=init_vocab, min_word_freq=min_word_freq)
