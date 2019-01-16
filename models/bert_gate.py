@@ -31,18 +31,16 @@ class BertGate(nn.Module):
         # # pos_tag embedding
         # self.pos_tag_embedding = nn.Embedding(len(args.pos_tag_vocab), args.word_dim)
         # gate
-        self.gate = nn.Linear(self.bert_model.config.hidden_size, self.args.gate_class)
+        self.gate = nn.Linear(2 * self.bert_model.config.hidden_size, self.args.gate_class)
         # column pointer network
-        self.column_pointer_network = GlobalAttention(args=self.args, dim=self.bert_model.config.hidden_size, attn_type="mlp")
+        self.column_pointer_network = GlobalAttention(args=self.args, dim=self.bert_model.config.hidden_size, is_transform_out=False, attn_type="mlp")
         if self.args.crf:
             # todo: set num for baseline
             if self.args.model == 'gate':
-                crf_columns_split_marker_max_len = self.args.columns_split_marker_max_len if self.args.bert_model is None else self.args.bert_columns_split_marker_max_len
-                crf_cells_split_marker_max_len = self.args.cells_split_marker_max_len if self.args.bert_model is None else self.args.bert_cells_split_marker_max_len
                 if self.args.cell_info:
-                    self.crf = ConditionalRandomField(1 + crf_columns_split_marker_max_len - 1 + crf_cells_split_marker_max_len - 1)
+                    self.crf = ConditionalRandomField(1 + self.args.bert_columns_split_marker_max_len - 1 + self.args.bert_cells_split_marker_max_len - 1)
                 else:
-                    self.crf = ConditionalRandomField(1 + crf_columns_split_marker_max_len - 1 + 1)
+                    self.crf = ConditionalRandomField(1 + self.args.bert_columns_split_marker_max_len - 1 + 1)
             else:
                 raise NotImplementedError
 
@@ -86,6 +84,7 @@ class BertGate(nn.Module):
                                                                             context_lengths=columns_split_marker_len - 1, context_max_len=self.args.bert_columns_split_marker_max_len - 1)
         else:
             raise NotImplementedError
+        # gate_input = torch.cat([column_attn_h, bert_tokens_sum], dim=-1)
         gate_input = column_attn_h
         # (batch_size, tokenize_max_len, self.args.gate_class)
         gate_output = self.gate(gate_input)

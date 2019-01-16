@@ -21,7 +21,7 @@ def main(mode, args):
     args.vocab, args.vocab_size, args.index2word = word2index, len(word2index), index2word
     # get data_from_train from only_label = True, for same as train baseline
     args.only_label = True
-    train_dataset = BindingDataset('dev', args=args)
+    train_dataset = BindingDataset('train', args=args)
     data_from_train = (train_dataset.tokenize_max_len, train_dataset.columns_token_max_len,
                        train_dataset.columns_split_marker_max_len, train_dataset.cells_token_max_len,
                        train_dataset.cells_split_marker_max_len, train_dataset.pos_tag_vocab,
@@ -47,7 +47,7 @@ def main(mode, args):
     elif mode == 'anonymous':
         args.only_label = False
     # build train_dataloader
-    train_dataset = BindingDataset('dev', args=args, data_from_train=data_from_train)
+    train_dataset = BindingDataset('train', args=args, data_from_train=data_from_train)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
     # build dev_dataloader
     args.shuffle = False
@@ -106,8 +106,8 @@ def main(mode, args):
 
 if __name__ == '__main__':
     # set environ, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
-    torch.cuda.set_device(1)
+    os.environ["CUDA_VISIBLE_DEVICES"] = '7'
+    torch.cuda.set_device(7)
     print(torch.cuda.device_count())
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')

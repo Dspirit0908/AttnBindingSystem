@@ -15,7 +15,8 @@ word_embedding_path = data_path + 'glove.6B.300d.txt'
 class Args(object):
     def __init__(self):
         self.seed = 72
-        self.lr = 0.001
+        self.lr = 1e-3
+        self.small_lr = 1e-5
         self.weight_decay = 0.001
         self.epochs = 200
         self.batch_size = 32
