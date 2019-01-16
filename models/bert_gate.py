@@ -46,17 +46,27 @@ class BertGate(nn.Module):
 
     def forward(self, inputs):
         # unpack inputs to data
-        tokenize, tokenize_len, tokenize_marker, tokenize_marker_len = inputs[0]  # (batch_size, tokenize_max_len), (batch_size), (batch_size, tokenize_max_len), (batch_size)
-        columns_split, columns_split_len, columns_split_marker, columns_split_marker_len = inputs[1]  # (batch_size, bert_columns_split_max_len), _, _, _
-        cells_split, cells_split_len, cells_split_marker, cells_split_marker_len = inputs[2]
+        # (batch_size, tokenize_max_len), (batch_size), (batch_size, tokenize_max_len), (batch_size)
+        tokenize, tokenize_len, tokenize_marker, tokenize_marker_len = inputs[0]
+        # (batch_size, bert_columns_split_max_len), _, _, _
+        columns_split, columns_split_len, columns_split_marker, columns_split_marker_len = inputs[1]
+        # cells_split, cells_split_len, cells_split_marker, cells_split_marker_len = inputs[2]
+        # get batch_size and device
         batch_size = tokenize.size(0)
+        device = tokenize.device
+        # print(batch_size, device)
         # encode token and columns
         # (batch_size, tokenize_max_len + bert_columns_split_max_len)
         bert_tokens_and_cols = torch.cat([tokenize, columns_split], dim=-1)
-        bert_tokens_segments, bert_columns_segments = torch.zeros_like(tokenize), torch.ones_like(columns_split)
+        bert_tokens_segments, bert_columns_segments = torch.zeros_like(tokenize).to(device), torch.ones_like(columns_split).to(device)
         # (batch_size, tokenize_max_len + bert_columns_split_max_len)
         bert_segments = torch.cat([bert_tokens_segments, bert_columns_segments], dim=-1)
         bert_tokens_mask, bert_columns_mask = sequence_mask(tokenize_len, max_len=self.args.bert_tokenize_max_len), sequence_mask(columns_split_len, max_len=self.args.bert_columns_split_max_len)
+        # print(bert_tokens_mask.size(), bert_columns_mask.size(), bert_tokens_mask.device, bert_columns_mask.device)
+        # print(tokenize_len)
+        # print(bert_tokens_mask)
+        # print(columns_split_len)
+        # print(bert_columns_mask)
         bert_mask = torch.cat([bert_tokens_mask, bert_columns_mask], dim=-1)
         # (batch_size, tokenize_max_len + bert_columns_split_max_len, self.bert_model.config.hidden_size), _
         bert_output, _ = self.bert_model(bert_tokens_and_cols, bert_segments, attention_mask=bert_mask, output_all_encoded_layers=False)
@@ -64,7 +74,7 @@ class BertGate(nn.Module):
         bert_tokens_output, bert_columns_output = bert_output[:, :self.args.bert_tokenize_max_len, :], bert_output[:, self.args.bert_tokenize_max_len:, :]
         # add sub_tokens
         bert_tokens_output_cumsum, bert_columns_output_cumsum = torch.cumsum(bert_tokens_output, dim=1), torch.cumsum(bert_columns_output, dim=1)
-        batch_index = torch.LongTensor(range(batch_size)).unsqueeze(-1).to(self.args.device)
+        batch_index = torch.LongTensor(range(batch_size)).unsqueeze(-1).to(device)
         # (batch_size, tokenize_max_len - 1), (batch_size, bert_columns_split_max_len - 1)
         tokens_batch_index, columns_batch_index = batch_index.expand(tokenize_marker.size(0), tokenize_marker.size(1) - 1), batch_index.expand(columns_split_marker.size(0), columns_split_marker.size(1) - 1)
         # add sub_tokens for tokens
@@ -90,12 +100,13 @@ class BertGate(nn.Module):
         gate_output = self.gate(gate_input)
         gate_output_column = gate_output[:, :, 1].unsqueeze(-1).expand(column_align_score.size()) * column_align_score
         pointer_align_scores = torch.cat([gate_output[:, :, 0].unsqueeze(-1), gate_output_column, gate_output[:, :, 2].unsqueeze(-1)], dim=-1)
-        return gate_output, column_align_score, pointer_align_scores
+        if self.args.crf is False:
+            return gate_output, column_align_score, pointer_align_scores
+        else:
+            raise NotImplementedError
+            # loss = -self.crf(pointer_align_scores, labels, mask=bert_tokens_mask)
+            # loss /= batch_size
+            # return loss
 
-    def forward_loss(self, inputs, labels):
-        gate_output, _, pointer_align_scores = self.forward(inputs)
-        tokenize_len = inputs[0][1]
-        mask = sequence_mask(tokenize_len, max_len=self.args.bert_tokenize_max_len).to(self.args.device)
-        loss = -self.crf(pointer_align_scores, labels, mask=mask)
-        loss /= labels.size(1)
-        return loss
+    def get_small_lr_parameters(self):
+        return self.bert_model.parameters()

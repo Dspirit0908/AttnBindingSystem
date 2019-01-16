@@ -16,7 +16,6 @@ from utils import load_data, build_vocab, build_all_vocab, change2idx, pad, max_
 class BindingDataset(Dataset):
     def __init__(self, mode, args, data_from_train=None):
         self.args = args
-        device = self.args.device
         # get path
         data_path, tables_path = get_bert_path(mode), get_wikisql_tables_path(mode)
         # load data
@@ -71,42 +70,40 @@ class BindingDataset(Dataset):
                         gate_label.append(2)
             pointer_label_list.append(pointer_label), gate_label_list.append(gate_label)
         # change2tensor
-        self.tokenize_tensor = torch.LongTensor(pad(change2idx(tokenize_list, vocab=self.args.vocab, name='tokenize_' + mode), max_len=self.tokenize_max_len)).to(device)
-        self.tokenize_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.tokenize_max_len), tokenize_len_list))).to(device)
-        self.pos_tag_tensor = torch.LongTensor(pad(change2idx(pos_tag_list, vocab=self.pos_tag_vocab, name='pos_tag_' + mode), max_len=self.tokenize_max_len)).to(device)
-        self.columns_split_tensor = torch.LongTensor(pad(change2idx(columns_split_list, vocab=self.args.vocab, name='columns_split_' + mode), max_len=self.columns_token_max_len)).to(device)
-        self.columns_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_token_max_len), columns_split_len_list))).to(device)
-        self.columns_split_marker_tensor = torch.LongTensor(pad(columns_split_marker_list, max_len=self.columns_split_marker_max_len)).to(device)
-        self.columns_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_split_marker_max_len), columns_split_marker_len_list))).to(device)
-        self.cells_split_tensor = torch.LongTensor(pad(change2idx(cells_split_list, vocab=self.args.vocab, name='cells_split_' + mode), max_len=self.cells_token_max_len)).to(device)
-        self.cells_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_token_max_len), cells_split_len_list))).to(device)
-        self.cells_split_marker_tensor = torch.LongTensor(pad(cells_split_marker_list, max_len=self.cells_split_marker_max_len)).to(device)
-        self.cells_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_split_marker_max_len), cells_split_marker_len_list))).to(device)
+        if self.args.bert_model is None:
+            self.tokenize_tensor = torch.LongTensor(pad(change2idx(tokenize_list, vocab=self.args.vocab, name='tokenize_' + mode), max_len=self.tokenize_max_len))
+            self.tokenize_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.tokenize_max_len), tokenize_len_list)))
+            self.pos_tag_tensor = torch.LongTensor(pad(change2idx(pos_tag_list, vocab=self.pos_tag_vocab, name='pos_tag_' + mode), max_len=self.tokenize_max_len))
+            self.columns_split_tensor = torch.LongTensor(pad(change2idx(columns_split_list, vocab=self.args.vocab, name='columns_split_' + mode), max_len=self.columns_token_max_len))
+            self.columns_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_token_max_len), columns_split_len_list)))
+            self.columns_split_marker_tensor = torch.LongTensor(pad(columns_split_marker_list, max_len=self.columns_split_marker_max_len))
+            self.columns_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.columns_split_marker_max_len), columns_split_marker_len_list)))
+            self.cells_split_tensor = torch.LongTensor(pad(change2idx(cells_split_list, vocab=self.args.vocab, name='cells_split_' + mode), max_len=self.cells_token_max_len))
+            self.cells_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_token_max_len), cells_split_len_list)))
+            self.cells_split_marker_tensor = torch.LongTensor(pad(cells_split_marker_list, max_len=self.cells_split_marker_max_len))
+            self.cells_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.cells_split_marker_max_len), cells_split_marker_len_list)))
         # can not pad -100 for crf
-        if args.crf:
-            pad_token = 0
-        else:
-            pad_token = -100
-        self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=pad_token)).to(device)
-        self.gate_label_tensor = torch.LongTensor(pad(gate_label_list, max_len=self.tokenize_max_len, pad_token=-100)).to(device)
+        pad_token = 0 if args.crf else -100
+        self.pointer_label_tensor = torch.LongTensor(pad(pointer_label_list, max_len=self.tokenize_max_len, pad_token=pad_token))
+        self.gate_label_tensor = torch.LongTensor(pad(gate_label_list, max_len=self.tokenize_max_len, pad_token=-100))
         # handle sql_sel_col_list, sql_conds_cols_list, sql_conds_values_list
-        self.sql_sel_col_list = torch.LongTensor(sql_sel_col_list).to(device)
+        self.sql_sel_col_list = torch.LongTensor(sql_sel_col_list)
         assert max_len_of_m_lists(sql_conds_cols_list) == max_len_of_m_lists(sql_conds_values_list)
-        self.sql_conds_cols_list = torch.LongTensor(pad(sql_conds_cols_list, max_len=max_len_of_m_lists(sql_conds_cols_list), pad_token=-100)).to(device)
-        self.sql_conds_values_list = torch.LongTensor(pad(sql_conds_values_list, max_len=max_len_of_m_lists(sql_conds_values_list), pad_token=[-100, -100])).to(device)
+        self.sql_conds_cols_list = torch.LongTensor(pad(sql_conds_cols_list, max_len=max_len_of_m_lists(sql_conds_cols_list), pad_token=-100))
+        self.sql_conds_values_list = torch.LongTensor(pad(sql_conds_values_list, max_len=max_len_of_m_lists(sql_conds_values_list), pad_token=[-100, -100]))
         if self.args.bert_model is not None:
-            self.bert_tokenize_tensor = torch.LongTensor(pad(bert_indexed_tokenize_list, max_len=self.bert_tokenize_max_len)).to(device)
-            self.bert_tokenize_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_tokenize_max_len), tokenize_len_list))).to(device)
-            self.bert_tokenize_marker_tensor = torch.LongTensor(pad(bert_tokenize_marker_list, max_len=self.bert_tokenize_marker_max_len)).to(device)
-            self.bert_tokenize_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_tokenize_marker_max_len), tokenize_len_list))).to(device)
-            self.bert_columns_split_tensor = torch.LongTensor(pad(bert_indexed_columns_list, max_len=self.bert_columns_split_max_len)).to(device)
-            self.bert_columns_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_columns_split_max_len), columns_split_len_list))).to(device)
-            self.bert_columns_split_marker_tensor = torch.LongTensor(pad(bert_columns_split_marker_list, max_len=self.bert_columns_split_marker_max_len)).to(device)
-            self.bert_columns_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_columns_split_marker_max_len), columns_split_len_list))).to(device)
-            self.bert_cells_split_tensor = torch.LongTensor(pad(bert_indexed_cells_list, max_len=self.bert_cells_split_max_len)).to(device)
-            self.bert_cells_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_cells_split_max_len), cells_split_len_list))).to(device)
-            self.bert_cells_split_marker_tensor = torch.LongTensor(pad(bert_cells_split_marker_list, max_len=self.bert_cells_split_marker_max_len)).to(device)
-            self.bert_cells_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_cells_split_marker_max_len), cells_split_len_list))).to(device)
+            self.bert_tokenize_tensor = torch.LongTensor(pad(bert_indexed_tokenize_list, max_len=self.bert_tokenize_max_len))
+            self.bert_tokenize_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_tokenize_max_len), tokenize_len_list)))
+            self.bert_tokenize_marker_tensor = torch.LongTensor(pad(bert_tokenize_marker_list, max_len=self.bert_tokenize_marker_max_len))
+            self.bert_tokenize_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_tokenize_marker_max_len), tokenize_len_list)))
+            self.bert_columns_split_tensor = torch.LongTensor(pad(bert_indexed_columns_list, max_len=self.bert_columns_split_max_len))
+            self.bert_columns_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_columns_split_max_len), columns_split_len_list)))
+            self.bert_columns_split_marker_tensor = torch.LongTensor(pad(bert_columns_split_marker_list, max_len=self.bert_columns_split_marker_max_len))
+            self.bert_columns_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_columns_split_marker_max_len), columns_split_len_list)))
+            self.bert_cells_split_tensor = torch.LongTensor(pad(bert_indexed_cells_list, max_len=self.bert_cells_split_max_len))
+            self.bert_cells_split_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_cells_split_max_len), cells_split_len_list)))
+            self.bert_cells_split_marker_tensor = torch.LongTensor(pad(bert_cells_split_marker_list, max_len=self.bert_cells_split_marker_max_len))
+            self.bert_cells_split_marker_len_tensor = torch.LongTensor(list(map(lambda len: min(len, self.bert_cells_split_marker_max_len), cells_split_len_list)))
 
     def __getitem__(self, index):
         if self.args.bert_model is None:

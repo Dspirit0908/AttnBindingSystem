@@ -106,8 +106,6 @@ def main(mode, args):
 
 if __name__ == '__main__':
     # set environ, loggging
-    os.environ["CUDA_VISIBLE_DEVICES"] = '7'
-    torch.cuda.set_device(7)
     print(torch.cuda.device_count())
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger('binding')
@@ -120,7 +118,7 @@ if __name__ == '__main__':
     # args.load_w2v, args.word_dim = True, 300
     args.cell_info = False
     args.attn_concat = True
-    args.crf = True
+    args.crf = False
     # args.bert_model = None
     main('train baseline', args)
     # main('test model', args)

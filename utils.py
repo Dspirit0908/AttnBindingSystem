@@ -502,16 +502,13 @@ def runBiRNN(rnn, inputs, seq_lengths, hidden=None, total_length=None):
     return desorted_res, hidden
 
 
-def sequence_mask(lengths, max_len=None):
+def sequence_mask(lengths, max_len=None, device=None):
     """
     Creates a boolean mask from sequence lengths.
     """
     batch_size = lengths.numel()
     max_len = max_len or lengths.max()
-    return (torch.arange(0, max_len)
-            .type_as(lengths)
-            .repeat(batch_size, 1)
-            .lt(lengths.unsqueeze(1)))
+    return torch.arange(0, max_len).to(lengths.device).type_as(lengths).repeat(batch_size, 1).lt(lengths.unsqueeze(1))
 
 
 def fix_hidden(h):

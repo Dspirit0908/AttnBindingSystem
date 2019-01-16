@@ -129,7 +129,7 @@ class GlobalAttention(nn.Module):
 
         if context_lengths is not None:
             mask = self.sequence_mask(context_lengths, context_max_len)
-            mask = mask.unsqueeze(1).to(self.args.device)
+            mask = mask.unsqueeze(1)
             # (bz, max_len) -> (bz, 1, max_len), so mask can broadcast
             align.data.masked_fill_(1 - mask, -float('inf'))
 
@@ -153,14 +153,11 @@ class GlobalAttention(nn.Module):
             align_vectors = align_vectors.squeeze(1)
         # (batch, targetL, dim_), (batch, targetL, sourceL)
         return attn_h, align_vectors
-    
+
     def sequence_mask(self, lengths, max_len=None):
         """
         Creates a boolean mask from sequence lengths.
         """
         batch_size = lengths.numel()
         max_len = max_len or lengths.max()
-        return (torch.arange(0, max_len)
-            .type_as(lengths)
-            .repeat(batch_size, 1)
-            .lt(lengths.unsqueeze(1)))
+        return torch.arange(0, max_len).type_as(lengths).repeat(batch_size, 1).lt(lengths.unsqueeze(1)).to(lengths.device)

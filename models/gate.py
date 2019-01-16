@@ -135,3 +135,9 @@ class Gate(nn.Module):
         loss = -self.crf(pointer_align_scores, labels, mask=mask)
         loss /= labels.size(1)
         return loss
+
+    def get_small_lr_parameters(self):
+        if self.args.load_w2v:
+            return self.token_embedding.parameters()
+        else:
+            return None

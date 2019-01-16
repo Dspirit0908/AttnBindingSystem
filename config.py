@@ -19,13 +19,14 @@ class Args(object):
         self.small_lr = 1e-5
         self.weight_decay = 0.001
         self.epochs = 200
-        self.batch_size = 32
+        self.batch_size = 64
         self.log_trian_interval = 10
         self.log_test_interval = 1
         self.num_layers = 1
         self.dropout_p = 0.1
         self.teacher_forcing_ratio = 0.5
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device_ids = [0, 4, 5, 6]
         self.cuda = True if str(self.device) == 'cuda' else False
         self.save_bar_pretrained = 0.45
         self.save_bar_rl = 0.7

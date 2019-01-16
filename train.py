@@ -28,39 +28,46 @@ def train(train_loader, dev_loader, args, model):
     log_dir = './logs/' + str(args.cell_info) + '_' + str(args.attn_concat) + '_' + str(args.crf) + '_' + str(datetime.datetime.now().microsecond)
     logger.info(log_dir)
     dev_writer = SummaryWriter(log_dir=log_dir)
-    if args.cuda:
-        model.cuda()
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model, device_ids=args.device_ids)
+    model.to(args.device)
     # todo: init_parameters and adjust learning rate
     # model.apply(init_parameters)
     if args.load_w2v:
-        freeze_lr_layers = set(map(id, model.token_embedding.parameters()))
-        normal_lr_layers = list(filter(lambda p: id(p) not in freeze_lr_layers, model.parameters()))
-        optimizer = torch.optim.Adam([{'params': model.token_embedding.parameters(), 'lr': 0}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
+        small_lr_layers = set(map(id, model.module.token_embedding.parameters()))
+        normal_lr_layers = list(filter(lambda p: id(p) not in small_lr_layers, model.parameters()))
+        optimizer = torch.optim.Adam([{'params': model.module.token_embedding.parameters(), 'lr': args.small_lr}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
     else:
         if args.bert_model is None:
             optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         else:
-            small_lr_layers = set(map(id, model.bert_model.parameters()))
+            small_lr_layers = set(map(id, model.module.bert_model.parameters()))
             normal_lr_layers = list(filter(lambda p: id(p) not in small_lr_layers, model.parameters()))
-            optimizer = torch.optim.Adam([{'params': model.bert_model.parameters(), 'lr': 1e-5}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
+            optimizer = torch.optim.Adam([{'params': model.module.bert_model.parameters(), 'lr': args.small_lr}, {'params': normal_lr_layers}], lr=args.lr, weight_decay=args.weight_decay)
     model.train()
     best_correct = 0
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-100)
     for epoch in range(1, args.epochs + 1):
         for data in train_loader:
-            inputs, (label, _), _ = data
+            inputs, (labels, _), _ = data
+            for input in inputs:
+                for index, inp in enumerate(input):
+                    input[index] = inp.to(args.device)
+            # print(inputs[0][1])
+            labels = labels.to(args.device)
             # zero_grad
             model.zero_grad()
             optimizer.zero_grad()
             if args.crf:
-                loss = model.forward_loss(inputs, label)
+                loss = model(inputs, labels)
             else:
                 # feed forward
                 _, _, logit = model(inputs)
                 # loss = criterion(logit.permute(0, 2, 1).contiguous(), label)
                 loss = 0
                 for ti in range(logit.size()[1]):
-                    loss += criterion(logit[:, ti], label[:, ti])
+                    loss += criterion(logit[:, ti], labels[:, ti])
+            print('loss'), print(loss)
             loss.backward()
             optimizer.step()
             # sys.exit()
@@ -84,18 +91,22 @@ def eval(data_loader, args, model, epoch=None, s_time=time.time()):
     total_pred, total_true = np.array([]), np.array([])
     correct, total = 0, 0
     for data in data_loader:
-        inputs, (label, _), _ = data
+        inputs, (labels, _), _ = data
+        for input in inputs:
+            for index, inp in enumerate(input):
+                input[index] = inp.to(args.device)
+        labels = labels.to(args.device)
         # feed forward
         _, _, logit = model(inputs)
         if args.crf:
-            tokenize_len = inputs[0][1]
-            mask = sequence_mask(tokenize_len, max_len=args.tokenize_max_len).to(args.device)
-            pred = model.crf.viterbi_tags(logit, mask)
+            tokenize_len = inputs[0][1].to(args.device)
+            mask = sequence_mask(tokenize_len, max_len=args.tokenize_max_len)
+            pred = model.module.crf.viterbi_tags(logit, mask)
             pred = [p[0] for p in pred]
         else:
             logit = torch.max(logit, 2)[1]
             pred = logit.data.cpu().numpy().tolist()
-        true = label.data.cpu().numpy().tolist()
+        true = labels.data.cpu().numpy().tolist()
         for i in range(len(pred)):
             true_truncate, pred_truncate = [], []
             for t, p in zip(true[i], pred[i]):
